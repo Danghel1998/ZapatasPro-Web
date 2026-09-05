@@ -45,12 +45,14 @@
       <select id="preset_dropdown" class="text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 font-bold py-1.5 px-3 rounded text-slate-700 transition cursor-pointer" onchange="if(this.value) { document.querySelector(`[data-preset='${this.value}']`).click(); }">
         <option value="zapata_aislada_tipica" selected>⭐ Zapata Aislada Típica</option>
         <option value="zapata_aislada_excentrica">Zapata Aislada con Momento</option>
+        <option value="zapata_aislada_sismo">Zapata Aislada con Sismo (envolvente 9 combinaciones)</option>
         <option value="zapata_combinada_tipica">Zapata Combinada (2 columnas)</option>
         <option value="zapata_conectada_tipica">Zapata Conectada (viga de conexión)</option>
       </select>
       <div class="hidden">
         <button data-preset="zapata_aislada_tipica"></button>
         <button data-preset="zapata_aislada_excentrica"></button>
+        <button data-preset="zapata_aislada_sismo"></button>
         <button data-preset="zapata_combinada_tipica"></button>
         <button data-preset="zapata_conectada_tipica"></button>
       </div>
@@ -121,6 +123,12 @@
                 <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.15" max="1.5" class="eng-cell-input" data-bind="isolated.col_B"><span class="eng-unit-badge">m</span></div></div>
               <div class="eng-input-group"><label class="eng-label"><span>Prof. de desplante</span><span class="eng-symbol">(Df)</span></label>
                 <div class="eng-cell-wrapper"><input type="number" step="0.1" min="0.4" max="5" class="eng-cell-input" data-bind="isolated.Df"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Tipo de columna</span></label>
+                <div class="eng-cell-wrapper"><select class="eng-cell-input font-bold text-center text-xs" data-bind="isolated.col_type">
+                  <option value="interior">Interior (αs=40)</option>
+                  <option value="medianera">Borde/Medianera (αs=30)</option>
+                  <option value="esquinera">Esquinera (αs=20)</option>
+                </select></div></div>
             </div>
           </div>
 
@@ -143,6 +151,30 @@
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="isolated.My_d"></div>
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="isolated.My_l"><span class="eng-unit-badge">tn·m</span></div>
                 </div></div>
+            </div>
+          </div>
+
+          <div class="only-aislada eng-card">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-rose-950"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Cargas de Sismo (opcional)</span>
+              <span class="text-[10px] text-rose-700 font-semibold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">Envolvente E.030</span>
+            </div>
+            <p class="text-[10px] text-slate-500 mb-2">Si se deja todo en 0, el diseño usa solo la combinación de gravedad 1.4CM+1.7CV. Si se ingresa sismo, se evalúa la envolvente completa (gravedad ± sismo X ± sismo Y, 9 combinaciones) igual que una memoria de cálculo con verificación sísmica.</p>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Sismo X — P / Mx / My</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:4.2rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="isolated.Psx"></div>
+                  <div class="eng-cell-wrapper" style="width:4.2rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="isolated.Mx_sx"></div>
+                  <div class="eng-cell-wrapper" style="width:4.2rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="isolated.My_sx"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Sismo Y — P / Mx / My</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:4.2rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="isolated.Psy"></div>
+                  <div class="eng-cell-wrapper" style="width:4.2rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="isolated.Mx_sy"></div>
+                  <div class="eng-cell-wrapper" style="width:4.2rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="isolated.My_sy"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Factor admisible con sismo</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="1" max="1.5" class="eng-cell-input" data-bind="isolated.seismic_bearing_factor"><span class="eng-unit-badge">× q_adm</span></div></div>
             </div>
           </div>
 

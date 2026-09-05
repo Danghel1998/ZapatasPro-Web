@@ -13,6 +13,12 @@
  * del relleno: ese peso se equilibra con una reacción del suelo igual y
  * uniformemente distribuida bajo el área que ocupa, por lo que no induce
  * flexión ni cortante adicional en la losa (simplificación estándar).
+ *
+ * Excepción: cuando el caso incluye sismo, isolatedFooting.js arma "Pu" a
+ * partir de la presión de diseño "su" de la envolvente de 9 combinaciones
+ * (que sí incluye el peso propio, igual que la hoja de cálculo real de
+ * referencia), aplicada de forma uniforme — el efecto es una presión de
+ * diseño ligeramente mayor y del lado conservador.
  */
 
 import {
@@ -38,6 +44,7 @@ export function designFootingSlab(p) {
   const { L, B, h, col_L, col_B, Pu, fc, fy, fc_kgcm2, cover, dbMain, rebarTrans } = p;
   const ex_col = p.ex_col || 0, ey_col = p.ey_col || 0;
   const Mu_x = p.Mu_x || 0, Mu_y = p.Mu_y || 0;
+  const alphaS = p.alphaS || 40; // 40 interior, 30 borde/medianera, 20 esquinera (E.060 / ACI 318)
   const A = L * B;
 
   const qL = (x) => Pu / A + (12 * Mu_x * x) / (B * Math.pow(L, 3));
@@ -99,7 +106,7 @@ export function designFootingSlab(p) {
   const q_u_avg = Pu / A;
   const Vu_punch = Math.max(0, Pu - q_u_avg * areaWithinPerimeter);
   const betaC = Math.max(col_L, col_B) / Math.min(col_L, col_B);
-  const punchCap = punchingShearCapacity_kN(fc_kgcm2, bo, d_avg, betaC, 40);
+  const punchCap = punchingShearCapacity_kN(fc_kgcm2, bo, d_avg, betaC, alphaS);
   const phiVc_punch = PHI_SHEAR * punchCap.Vc_kN;
   const pass_punching = Vu_punch <= phiVc_punch;
 

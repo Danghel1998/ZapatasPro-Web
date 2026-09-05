@@ -416,6 +416,14 @@ export class AppUIController {
         pass: geo.pass_bearing_1 && geo.pass_bearing_2,
         progress: Math.max(geo.q1_kgcm2, geo.q2_kgcm2) / geo.q_adm_kgcm2 * 100,
       });
+    } else if (geo.hasSeismic) {
+      this.renderKPIBadge('kpi_bearing', {
+        title: 'Presión de Contacto (envolvente sísmica)',
+        val: `${geo.seismic_envelope.governing_q_kgcm2.toFixed(2)} kg/cm²`,
+        req: `${geo.seismic_envelope.governingRow.label}`,
+        pass: geo.pass_bearing,
+        progress: (geo.seismic_envelope.governing_q_kgcm2 / geo.seismic_envelope.governingRow.limit_kgcm2) * 100,
+      });
     } else {
       this.renderKPIBadge('kpi_bearing', {
         title: 'Presión de Contacto (q_max)',
@@ -652,6 +660,10 @@ export class AppUIController {
       ['Carga de servicio — muerta / viva', `${d.Pd.toFixed(1)} / ${d.Pl.toFixed(1)} tn`],
       ['Momento de servicio Mx (D/L)', `${d.Mx_d.toFixed(1)} / ${d.Mx_l.toFixed(1)} tn·m`],
       ['Momento de servicio My (D/L)', `${d.My_d.toFixed(1)} / ${d.My_l.toFixed(1)} tn·m`],
+      ...(geo.hasSeismic ? [
+        ['Sismo X — P / Mx / My (servicio)', `${d.Psx.toFixed(2)} tn / ${d.Mx_sx.toFixed(2)} / ${d.My_sx.toFixed(2)} tn·m`],
+        ['Sismo Y — P / Mx / My (servicio)', `${d.Psy.toFixed(2)} tn / ${d.Mx_sy.toFixed(2)} / ${d.My_sy.toFixed(2)} tn·m`],
+      ] : []),
       ['Peso específico del suelo (γs)', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`],
       ['Capacidad portante admisible (q_adm)', `${fnd.q_adm_kgcm2.toFixed(2)} kg/cm²`],
       [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
@@ -662,13 +674,35 @@ export class AppUIController {
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
       ['Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ex) <= geo.ex_max)],
       ['Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ey) <= geo.ey_max)],
-      ['Presión máxima de contacto q_max', `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.pass_bearing)],
+      ['Presión máxima de contacto q_max (sin sismo)', `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_kgcm2)],
     ]);
     if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
 
-    html += this._slabReportHtml(str, d.L, d.B, 3);
+    if (geo.hasSeismic) {
+      html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">2.1 Envolvente Sísmica (Cargas de Servicio) — 5 Combinaciones</h3>`;
+      html += `<p class="text-xs text-slate-600 mb-2">Presión en las 4 esquinas de la zapata para cada combinación (o su rectángulo equivalente si alguna esquina resulta en tracción); se reporta la más desfavorable de cada una.</p>`;
+      html += this._table(['Combinación', 'q (esquina más desfavorable)', 'Límite admisible', 'Estado'], geo.seismic_envelope.rows.map((r) => [
+        r.label,
+        `${r.q_governing_kgcm2.toFixed(2)} kg/cm²${r.minC < 0 ? ' (rectangular)' : ''}`,
+        `≤ ${r.limit_kgcm2.toFixed(2)} kg/cm²`,
+        this._badgeHtml(r.pass),
+      ]));
+      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${geo.seismic_envelope.governing_q_kgcm2.toFixed(2)} kg/cm².</p>`;
+    }
 
-    html += this._sectionTitle('4. Cuadro de Habilitación de Acero');
+    if (str.hasSeismic) {
+      html += this._sectionTitle('3. Envolvente Sísmica (Cargas Factoradas) — 9 Combinaciones');
+      html += `<p class="text-xs text-slate-600 mb-2">Misma lógica que la verificación de servicio, con las cargas factoradas (1.4CM+1.7CV; 1.25(CM+CV)±sismo; 0.9CM±sismo). La presión gobernante "su" se aplica luego de forma <b>uniforme</b> sobre toda la zapata para el diseño por punzonamiento, corte y flexión.</p>`;
+      html += this._table(['Combinación', 'q (esquina más desfavorable)'], str.envelope.rows.map((r) => [
+        r.label, `${r.q_governing_kgcm2.toFixed(2)} kg/cm²${r.minC < 0 ? ' (rectangular)' : ''}`,
+      ]));
+      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${str.envelope.governingRow.label}</b>. su = ${str.envelope.su_kgcm2.toFixed(3)} kg/cm² (presión de diseño uniforme).</p>`;
+      html += this._slabReportHtml(str, d.L, d.B, 4);
+    } else {
+      html += this._slabReportHtml(str, d.L, d.B, 3);
+    }
+
+    html += this._sectionTitle(`${str.hasSeismic ? 5 : 4}. Cuadro de Habilitación de Acero`);
     html += this._rebarTableHtml();
 
     return html;

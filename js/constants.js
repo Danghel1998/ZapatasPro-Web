@@ -41,6 +41,20 @@ export const DEFAULT_FOOTING_DATA = {
     Pl: 15.0,      // carga viva de servicio (tn)
     Mx_d: 0.0, Mx_l: 0.0, // momento de servicio en torno al eje "y" (produce excentricidad en X, dirección L) (tn-m)
     My_d: 0.0, My_l: 0.0, // momento de servicio en torno al eje "x" (produce excentricidad en Y, dirección B) (tn-m)
+    // Sismo en X e Y (cada uno como un caso de carga de servicio propio,
+    // sin descomponer en muerta/viva — igual convención que la hoja de
+    // cálculo de referencia: "SXD"/"SYD"). Con ambos en 0 (caso por
+    // defecto), la envolvente de 9 combinaciones se reduce a la única
+    // combinación de gravedad 1.4CM+1.7CV, igual que antes.
+    Psx: 0.0, Mx_sx: 0.0, My_sx: 0.0,
+    Psy: 0.0, Mx_sy: 0.0, My_sy: 0.0,
+    // Incremento admisible en la capacidad portante para combinaciones
+    // que incluyen sismo (E.030) — 1.25 en la hoja de referencia, aunque
+    // hay fuentes que usan 1.30; queda configurable.
+    seismic_bearing_factor: 1.25,
+    // Tipo de columna (afecta αs en punzonamiento: 40 interior, 30
+    // medianera/borde, 20 esquinera — E.060 / ACI 318).
+    col_type: 'interior',
   },
 
   // ---- Zapata Combinada (2 columnas, ancho B constante) ----
@@ -132,6 +146,26 @@ export const PRESET_PROJECTS = {
       d.isolated.Pd = 30.0; d.isolated.Pl = 12.0;
       d.isolated.Mx_d = 6.0; d.isolated.Mx_l = 3.0;
       d.foundation.q_adm_kgcm2 = 1.5;
+      return d;
+    })()
+  },
+  zapata_aislada_sismo: {
+    title: 'Zapata Aislada Interior con Sismo (envolvente de 9 combinaciones)',
+    desc: 'Columna interior 0.35×0.25 m con cargas de gravedad y sismo en X e Y (caso de referencia de una hoja de cálculo real de diseño estructural).',
+    data: (() => {
+      const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
+      d.footing_type = 'aislada';
+      d.isolated.L = 1.95; d.isolated.B = 1.85; d.isolated.h = 0.50;
+      d.isolated.col_L = 0.35; d.isolated.col_B = 0.25;
+      d.isolated.Df = 1.50;
+      d.isolated.Pd = 21.8576; d.isolated.Pl = 5.1633;
+      d.isolated.Mx_d = 0.522; d.isolated.Mx_l = 0.16;
+      d.isolated.My_d = 0.0177; d.isolated.My_l = 0.007;
+      d.isolated.Psx = 0.4589; d.isolated.Mx_sx = 0.0; d.isolated.My_sx = 0.0149;
+      d.isolated.Psy = 0.5271; d.isolated.Mx_sy = 0.008; d.isolated.My_sy = 0.0;
+      d.isolated.col_type = 'interior';
+      d.foundation.gamma_kgm3 = 1900.0;
+      d.foundation.q_adm_kgcm2 = 1.0;
       return d;
     })()
   },
