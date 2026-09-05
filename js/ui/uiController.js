@@ -10,9 +10,13 @@ import { calculateCombinedStructural } from '../engine/combinedFooting.js';
 import { calculateIsolatedRebarSchedule, calculateCombinedRebarSchedule } from '../engine/rebarSchedule.js';
 import { knToKg, kNmToKgm } from '../engine/units.js';
 import { FootingCanvasRenderer } from '../visualizer/footingCanvas.js';
+import { FootingRenderer3D } from '../visualizer/footingRenderer3D.js';
 
-const ISOLATED_VIEW_MODES = ['plan', 'section', 'pressures', 'rebar'];
-const COMBINED_VIEW_MODES = ['plan', 'section', 'diagram', 'rebar'];
+const ISOLATED_VIEW_MODES = ['plan', 'section', 'pressures', 'rebar', 'rebar3d'];
+const COMBINED_VIEW_MODES = ['plan', 'section', 'diagram', 'rebar', 'rebar3d'];
+
+const LEGEND_KEYS_ISOLATED = ['long_dir', 'short_band', 'short_outer', 'dowels'];
+const LEGEND_KEYS_COMBINED = ['bottom_long', 'top_long', 'trans_col1', 'trans_col2', 'dowels'];
 
 export class AppUIController {
   constructor() {
@@ -23,6 +27,7 @@ export class AppUIController {
 
     const canvasEl = document.getElementById('footingCanvas');
     this.renderer = new FootingCanvasRenderer(canvasEl);
+    this.renderer3D = null; // se crea perezosamente al abrir "Detalle 3D" por primera vez
 
     this.initUI();
     this.recalculateAndRender();
@@ -98,6 +103,11 @@ export class AppUIController {
     document.querySelectorAll('.only-aislada').forEach((el) => el.classList.toggle('hidden', !isIsolated));
     document.querySelectorAll('.only-combinada').forEach((el) => el.classList.toggle('hidden', isIsolated));
 
+    const legendKeys = isIsolated ? LEGEND_KEYS_ISOLATED : LEGEND_KEYS_COMBINED;
+    document.querySelectorAll('[data-rebar-key]').forEach((row) => {
+      row.classList.toggle('hidden', !legendKeys.includes(row.getAttribute('data-rebar-key')));
+    });
+
     const modes = isIsolated ? ISOLATED_VIEW_MODES : COMBINED_VIEW_MODES;
     document.querySelectorAll('[data-view-mode]').forEach((btn) => {
       const mode = btn.getAttribute('data-view-mode');
@@ -155,7 +165,26 @@ export class AppUIController {
         });
         btn.classList.add('bg-indigo-600', 'text-white', 'shadow');
         btn.classList.remove('bg-slate-100', 'text-slate-700');
-        this.renderer.setViewMode(btn.getAttribute('data-view-mode'));
+
+        const mode = btn.getAttribute('data-view-mode');
+        const container2D = document.getElementById('canvas2d_container');
+        const container3D = document.getElementById('canvas3d_container');
+        if (mode === 'rebar3d') {
+          if (container2D) container2D.classList.add('hidden');
+          if (container3D) container3D.classList.remove('hidden');
+          if (!this.renderer3D) {
+            this.renderer3D = new FootingRenderer3D(container3D);
+            this._setupRebar3DLegendToggles();
+          }
+          this.renderer3D.updateData(this.data, this.bearingResults, this.structResults);
+          this._updateRebar3DLegendDims();
+          this.renderer3D.start();
+        } else {
+          if (this.renderer3D) this.renderer3D.stop();
+          if (container3D) container3D.classList.add('hidden');
+          if (container2D) container2D.classList.remove('hidden');
+          this.renderer.setViewMode(mode);
+        }
       });
     });
 
@@ -192,7 +221,20 @@ export class AppUIController {
     });
 
     const resetBtn = document.getElementById('btn_reset_view');
-    if (resetBtn) resetBtn.addEventListener('click', () => this.renderer.resetView());
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        const container3D = document.getElementById('canvas3d_container');
+        if (this.renderer3D && container3D && !container3D.classList.contains('hidden')) {
+          this.renderer3D._fitCamera(
+            this.data.footing_type === 'aislada' ? this.data.isolated.L : this.data.combined.L,
+            this.data.footing_type === 'aislada' ? this.data.isolated.B : this.data.combined.B,
+            this.data.footing_type === 'aislada' ? this.data.isolated.h : this.data.combined.h,
+          );
+        } else {
+          this.renderer.resetView();
+        }
+      });
+    }
 
     const printBtn = document.getElementById('btn_print_report');
     if (printBtn) {
@@ -202,6 +244,9 @@ export class AppUIController {
         setTimeout(() => window.print(), 50);
       });
     }
+
+    const printPlanoBtn = document.getElementById('btn_print_plano');
+    if (printPlanoBtn) printPlanoBtn.addEventListener('click', () => this.printPlanoSheet());
 
     const exportJsonBtn = document.getElementById('btn_export_json');
     if (exportJsonBtn) {
@@ -251,10 +296,65 @@ export class AppUIController {
       this.rebarSchedule = calculateCombinedRebarSchedule(this.data, this.structResults);
     }
     this.renderer.updateData(this.data, this.bearingResults, this.structResults);
+    if (this.renderer3D) {
+      this.renderer3D.updateData(this.data, this.bearingResults, this.structResults);
+      this._updateRebar3DLegendDims();
+    }
 
     this.updateStatusBadges();
     this.updateStructuralSummary();
     this.generateCalculationReport();
+  }
+
+  /** Conecta los checkboxes de la leyenda del "Detalle 3D" para mostrar u
+   * ocultar cada tipo de acero de forma independiente. Se llama una sola
+   * vez, al crear el renderer3D. */
+  _setupRebar3DLegendToggles() {
+    document.querySelectorAll('#rebar3d_legend .rebar-vis-toggle').forEach((input) => {
+      input.addEventListener('change', () => {
+        const key = input.getAttribute('data-rebar-key');
+        if (this.renderer3D) this.renderer3D.setRebarTypeVisible(key, input.checked);
+      });
+    });
+    const realScaleToggle = document.getElementById('rebar3d_real_scale');
+    if (realScaleToggle) {
+      realScaleToggle.addEventListener('change', () => {
+        if (this.renderer3D) this.renderer3D.setRebarRealScale(realScaleToggle.checked);
+      });
+    }
+    const legendToggleBtn = document.getElementById('rebar3d_legend_toggle');
+    const legendBody = document.getElementById('rebar3d_legend_body');
+    if (legendToggleBtn && legendBody) {
+      legendToggleBtn.addEventListener('click', () => {
+        const collapsed = legendBody.classList.toggle('hidden');
+        legendToggleBtn.textContent = collapsed ? '▸' : '▾';
+      });
+    }
+  }
+
+  /** Escribe el diámetro y espaciamiento real de cada tipo de acero junto a
+   * su fila en la leyenda del "Detalle 3D", con los valores que ya calculó
+   * el motor estructural (sin recalcular nada). */
+  _updateRebar3DLegendDims() {
+    const str = this.structResults;
+    if (!str) return;
+    const isIsolated = this.data.footing_type === 'aislada';
+    const dims = isIsolated ? {
+      long_dir: `${str.dbMain.name} @ ${str.isLLong ? str.L_dir.spacing : str.B_dir.spacing} cm`,
+      short_band: `${str.dbMain.name} @ ${str.banding.sp_band} cm`,
+      short_outer: str.banding.sp_outer ? `${str.dbMain.name} @ ${str.banding.sp_outer} cm` : 'igual que banda central',
+      dowels: 'Referencial (arranque de columna)',
+    } : {
+      bottom_long: `${str.dbMain.name} @ ${str.bottom.spacing} cm`,
+      top_long: `${str.dbMain.name} @ ${str.top.spacing} cm`,
+      trans_col1: `${str.dbTrans.name} @ ${str.trans1.spacing} cm`,
+      trans_col2: `${str.dbTrans.name} @ ${str.trans2.spacing} cm`,
+      dowels: 'Referencial (arranque de columnas)',
+    };
+    document.querySelectorAll('.rebar-dim-text').forEach((span) => {
+      const key = span.getAttribute('data-dim-key');
+      if (dims[key]) span.textContent = dims[key];
+    });
   }
 
   renderKPIBadge(elementId, data) {
@@ -589,5 +689,115 @@ export class AppUIController {
     html += this._rebarTableHtml();
 
     return html;
+  }
+
+  // ===================================================================
+  // HOJA DE PLANO (impresión A3 horizontal)
+  // ===================================================================
+  printPlanoSheet() {
+    const container = document.getElementById('plano_sheet_content');
+    const pageStyle = document.getElementById('dynamic_page_style');
+    if (!container) return;
+
+    container.innerHTML = this._buildPlanoHtml();
+    if (pageStyle) pageStyle.textContent = '@page { size: A3 landscape; margin: 8mm; }';
+    document.body.classList.add('printing-plano');
+
+    const cleanup = () => {
+      document.body.classList.remove('printing-plano');
+      if (pageStyle) pageStyle.textContent = '';
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(() => window.print(), 50);
+  }
+
+  /** Arma el HTML de la hoja de plano: planta, armadura e isométrico 3D,
+   * más el cuadro de habilitación de acero y el cajetín (datos.plano). */
+  _buildPlanoHtml() {
+    const d = this.data;
+    const plano = d.plano || {};
+    const schedule = this.rebarSchedule;
+    const isIsolated = d.footing_type === 'aislada';
+
+    const prevMode = this.renderer.viewMode;
+    let imgPlanta = '', imgArmadura = '';
+    try { imgPlanta = this.renderer.captureSnapshot('plan'); } catch (e) { /* no disponible */ }
+    try { imgArmadura = this.renderer.captureSnapshot('rebar'); } catch (e) { /* no disponible */ }
+    this.renderer.setViewMode(prevMode);
+
+    let img3D = '';
+    try {
+      const container3D = document.getElementById('canvas3d_container');
+      if (!this.renderer3D && container3D) {
+        this.renderer3D = new FootingRenderer3D(container3D);
+        this._setupRebar3DLegendToggles();
+      }
+      if (this.renderer3D) {
+        this.renderer3D.updateData(this.data, this.bearingResults, this.structResults);
+        img3D = this.renderer3D.captureSnapshot();
+      }
+    } catch (e) { /* 3D no disponible */ }
+
+    const now = new Date();
+    const fecha = `${now.toLocaleDateString('es-PE', { month: 'long' }).toUpperCase()} - ${now.getFullYear()}`;
+    const tbRow = (label, value) => `<div class="plano-tb-row"><label>${label}</label><span>${value || '—'}</span></div>`;
+
+    const scheduleRows = schedule.rows.map((r) => `
+                <tr>
+                  <td>${r.mark}</td>
+                  <td>${r.element}</td>
+                  <td>${r.diameter_name}</td>
+                  <td class="num">${r.unitLength_m.toFixed(2)}</td>
+                  <td class="num">${r.quantity}</td>
+                  <td class="num">${r.totalLength_m.toFixed(1)}</td>
+                  <td class="num">${r.weight_kg.toFixed(1)}</td>
+                </tr>`).join('');
+
+    const nombrePlano = isIsolated ? 'Zapata Aislada' : 'Zapata Combinada';
+
+    return `
+      <div class="plano-sheet">
+        <div class="plano-main">
+          <div class="plano-panel" style="grid-column:1; grid-row:1;">
+            <div class="plano-panel-img">${imgPlanta ? `<img src="${imgPlanta}" alt="Planta de la zapata">` : ''}</div>
+            <div class="plano-panel-title"><span><span class="plano-bubble">1</span>PLANTA</span><span class="plano-scale">ESC: ${plano.escala || 'Indicada'}</span></div>
+          </div>
+          <div class="plano-panel" style="grid-column:2; grid-row:1;">
+            <div class="plano-panel-img">${imgArmadura ? `<img src="${imgArmadura}" alt="Detalle de armado">` : ''}</div>
+            <div class="plano-panel-title"><span><span class="plano-bubble">2</span>DETALLE DE ARMADO</span><span class="plano-scale">ESC: ${plano.escala || 'Indicada'}</span></div>
+          </div>
+          <div class="plano-panel" style="grid-column:3; grid-row:1;">
+            <div class="plano-panel-img">${img3D ? `<img src="${img3D}" alt="Isométrico del armado">` : ''}</div>
+            <div class="plano-panel-title"><span><span class="plano-bubble">3</span>ISOMÉTRICO DEL ARMADO</span></div>
+          </div>
+          <div class="plano-panel plano-panel-table" style="grid-row:2;">
+            <div class="plano-panel-title"><span><span class="plano-bubble">4</span>CUADRO DE HABILITACIÓN DE ACERO</span></div>
+            <table class="plano-table">
+              <thead><tr><th>Marca</th><th>Elemento</th><th>Ø</th><th>Long. unit. (m)</th><th>Cant.</th><th>Long. total (m)</th><th>Peso (kg)</th></tr></thead>
+              <tbody>${scheduleRows}
+                <tr class="plano-table-total"><td colspan="6">Peso total de acero</td><td>${schedule.totalWeight_kg.toFixed(1)} kg</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="plano-titleblock">
+          <div class="plano-tb-brand">ZapatasPro</div>
+          <div class="plano-tb-section">
+            ${tbRow('Dibujado por', plano.dibujado_por)}
+            ${tbRow('Revisado por', plano.revisado_por)}
+          </div>
+          <div class="plano-tb-section">${tbRow('Ubicación', plano.ubicacion)}</div>
+          <div class="plano-tb-section">${tbRow('Propietario', plano.propietario)}</div>
+          <div class="plano-tb-section">${tbRow('Nombre de proyecto', plano.proyecto)}</div>
+          <div class="plano-tb-section">${tbRow('Nombre de plano', nombrePlano)}</div>
+          <div class="plano-tb-section">
+            ${tbRow('Fecha', fecha)}
+            ${tbRow('Escala', plano.escala)}
+          </div>
+          <div class="plano-tb-code">${plano.codigo || 'E-01'}</div>
+        </div>
+      </div>
+    `;
   }
 }

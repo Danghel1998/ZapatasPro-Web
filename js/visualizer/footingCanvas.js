@@ -50,6 +50,20 @@ export class FootingCanvasRenderer {
 
   resetView() { this.zoom = 1.0; this.panX = 0; this.panY = 0; this.render(); }
 
+  /** Renderiza temporalmente en otro modo de vista para capturar una
+   * imagen PNG (usada en la hoja de "Plano"), sin alterar la vista
+   * interactiva activa. */
+  captureSnapshot(mode) {
+    const prevMode = this.viewMode;
+    this.viewMode = mode;
+    this.render();
+    let dataUrl = '';
+    try { dataUrl = this.canvas.toDataURL('image/png'); } catch (e) { /* canvas no disponible aún */ }
+    this.viewMode = prevMode;
+    this.render();
+    return dataUrl;
+  }
+
   resizeCanvas() {
     const rect = this.canvas.parentElement.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return;
