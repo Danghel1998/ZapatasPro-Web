@@ -25,10 +25,18 @@ export function hookStirrup_m(diameter_mm, diameter_m) {
 }
 
 /**
- * Acero requerido por flexión para una franja de ancho b_m, con la cuantía
- * mínima de losas/zapatas (E.060 9.7 / ACI 318 7.6.1, 0.18% como piso).
+ * Acero requerido por flexión para una franja de ancho b_m. Compara dos
+ * mínimos independientes y toma el mayor (igual que la memoria de
+ * referencia UNI, que los verifica como pasos separados):
+ *   - Mínimo de viga/franja a flexión (ACI 318 9.6.1 / E.060 9.6): sobre el
+ *     peralte EFECTIVO b·d — max(0.25√f'c/fy, 1.4/fy).
+ *   - Mínimo de losa por retracción y temperatura (ACI 318 24.4 / E.060
+ *     9.7, aplicable a zapatas por ser en esencia una losa): 0.0018 sobre
+ *     el peralte TOTAL (bruto) b·h — requiere pasar `h_m`. Si no se pasa
+ *     (p.ej. una viga de conexión, que no es una losa), solo rige el
+ *     mínimo de viga.
  */
-export function calcRequiredRebar(Mu_kNm, fc_MPa, fy_MPa, b_m, d_m, phi = PHI_FLEX) {
+export function calcRequiredRebar(Mu_kNm, fc_MPa, fy_MPa, b_m, d_m, phi = PHI_FLEX, h_m = null) {
   const Mu = Math.max(0.001, Mu_kNm);
   const b_cm = b_m * 100.0;
   const d_cm = d_m * 100.0;
@@ -49,17 +57,19 @@ export function calcRequiredRebar(Mu_kNm, fc_MPa, fy_MPa, b_m, d_m, phi = PHI_FL
 
   const rho_min1 = (0.25 * Math.sqrt(fc_MPa)) / fy_MPa;
   const rho_min2 = 1.4 / fy_MPa;
-  const rho_min = Math.max(0.0018, Math.max(rho_min1, rho_min2));
-
-  const rho_design = Math.max(rho, rho_min);
+  const rho_min = Math.max(rho_min1, rho_min2);
 
   const As_calc = rho * b_cm * d_cm;
-  const As_min = rho_min * b_cm * d_cm;
-  const As_design = rho_design * b_cm * d_cm;
+  const As_min_flex = rho_min * b_cm * d_cm;
+  const As_min_gross = h_m !== null ? 0.0018 * b_cm * (h_m * 100.0) : 0;
+  const As_min = Math.max(As_min_flex, As_min_gross);
+
+  const As_design = Math.max(As_calc, As_min);
+  const rho_design = As_design / (b_cm * d_cm);
 
   const a_cm = (As_design * (fy_MPa / 10.0)) / (0.85 * (fc_MPa / 10.0) * b_cm);
 
-  return { Mu_kNm, Rn, rho, rho_min, rho_design, a_cm, As_calc, As_min, As_design };
+  return { Mu_kNm, Rn, rho, rho_min, rho_design, a_cm, As_calc, As_min, As_min_flex, As_min_gross, As_design };
 }
 
 /** Espaciamiento comercial (redondeado hacia abajo a un valor constructivo estándar, en cm) que satisface el área de acero requerida por metro. */
@@ -75,9 +85,51 @@ export function calcSpacing(As_req_cm2_m, rebar_area_cm2) {
   return 30.0;
 }
 
-/** Longitud de desarrollo básica en tracción (fórmula simplificada usual en cursos de la UNI), en cm. */
-export function ldBasic_cm(fy_MPa, fc_MPa, db_mm) {
-  return Math.max(30.0, (fy_MPa / (2.1 * Math.sqrt(fc_MPa))) * (db_mm / 10.0) * 1.3);
+/**
+ * Longitud de desarrollo en TRACCIÓN para barras corrugadas (E.060 25.4.2 /
+ * ACI 318 25.4.2.3, caso "espaciamiento libre ≥ db y recubrimiento ≥ db,
+ * o con estribos mínimos" — el caso simplificado usual en la memoria de
+ * referencia UNI, sin refinar por Ψs/confinamiento). fy y f'c en kg/cm²,
+ * db en mm; resultado en cm. Ψt=Ψe=λ=1 (caso normal: barra inferior, sin
+ * epóxico, concreto de peso normal).
+ */
+export function ldTraccion_cm(fy_kgcm2, fc_kgcm2, db_mm, { psi_t = 1.0, psi_e = 1.0, lambda = 1.0 } = {}) {
+  const db_cm = db_mm / 10.0;
+  const divisor = db_mm <= 22.2 ? 8.2 : 6.6; // ≤ 7/8" u.8.2 ; ≥ 1" -> 6.6 (E.060 Tabla 25.4.2.3)
+  return Math.max(30.0, ((fy_kgcm2 * psi_t * psi_e * lambda) / (divisor * Math.sqrt(fc_kgcm2))) * db_cm);
+}
+
+/**
+ * Longitud de desarrollo en COMPRESIÓN para barras corrugadas (E.060
+ * 25.4.9 / ACI 318 25.4.9.2) — el mayor de dos expresiones, en cm. Usada
+ * para verificar el anclaje de las barras de la columna (dowels) que
+ * penetran en la zapata.
+ */
+export function ldCompresion_cm(fy_kgcm2, fc_kgcm2, db_mm) {
+  const db_cm = db_mm / 10.0;
+  const l1 = (0.075 * fy_kgcm2 / Math.sqrt(fc_kgcm2)) * db_cm;
+  const l2 = 0.0044 * fy_kgcm2 * db_cm;
+  return Math.max(20.0, l1, l2);
+}
+
+/**
+ * Verificación de aplastamiento (bearing) en la interfaz columna-zapata
+ * (E.060 10.17 / ACI 318 22.8) y, si no cumple, el acero de arranque
+ * (dowels) requerido para transmitir el excedente de carga. A2 es el área
+ * de la base mayor de la pirámide troncal a 2:1 contenida en la zapata —
+ * en la práctica, y siguiendo la memoria de referencia, el área total de
+ * la zapata (L·B) cuando esta cabe geométricamente (caso usual).
+ */
+export function verificarAplastamiento(Pu_kg, fc_kgcm2, A1_col_cm2, A2_zap_cm2, fy_kgcm2, phi = 0.70) {
+  const ratio = Math.min(2.0, Math.sqrt(A2_zap_cm2 / A1_col_cm2));
+  const phiPn = phi * 0.85 * fc_kgcm2 * A1_col_cm2 * ratio;
+  const pass = phiPn >= Pu_kg;
+  let As_dowel_cm2 = 0;
+  if (!pass) {
+    const phiPdowel = Pu_kg - phiPn;
+    As_dowel_cm2 = phiPdowel / (phi * fy_kgcm2);
+  }
+  return { ratio, phiPn, pass, As_dowel_cm2 };
 }
 
 /** Capacidad a cortante por corte en una dirección (viga ancha), Vc = 0.53√f'c·b·d (kg, cm), convertida a kN. */

@@ -75,6 +75,13 @@ export const DEFAULT_FOOTING_DATA = {
     Df: 1.50,
     P1d: 25.0, P1l: 10.0, // columna 1 (excéntrica): carga de servicio
     P2d: 45.0, P2l: 20.0, // columna 2 (interior)
+    // Momento neto de cada columna (tn·m), en torno al eje transversal a la
+    // línea de columnas — signo positivo: tiende a aumentar la reacción de
+    // la Zapata 2 (equivalente al "sentido horario positivo" de la
+    // memoria de referencia UNI). Entran directamente a la ecuación de
+    // equilibrio que resuelve N1/N2 junto con la excentricidad e1.
+    M1_d: 0.0, M1_l: 0.0,
+    M2_d: 0.0, M2_l: 0.0,
   },
 
   foundation: {
@@ -94,8 +101,8 @@ export const DEFAULT_FOOTING_DATA = {
 
   safety_req: {
     code: 'E060',
-    LF_D: 1.2,
-    LF_L: 1.6,
+    LF_D: 1.4,
+    LF_L: 1.7,
   },
 
   plano: {

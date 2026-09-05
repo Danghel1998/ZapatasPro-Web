@@ -16,8 +16,8 @@ export function calculateIsolatedStructural(footingData) {
   const dbMain = REBAR_TABLE[materials.rebar_main_id] ?? REBAR_TABLE[2];
   const rebarTrans = REBAR_TABLE[materials.rebar_trans_id] ?? REBAR_TABLE[1];
 
-  const LF_D = safety_req.LF_D ?? 1.2;
-  const LF_L = safety_req.LF_L ?? 1.6;
+  const LF_D = safety_req.LF_D ?? 1.4;
+  const LF_L = safety_req.LF_L ?? 1.7;
 
   const Pu = LF_D * tnToKn(isolated.Pd) + LF_L * tnToKn(isolated.Pl);
   const Mu_x = LF_D * tnToKn(isolated.Mx_d) + LF_L * tnToKn(isolated.Mx_l);

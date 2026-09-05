@@ -666,48 +666,9 @@ export class AppUIController {
     ]);
     if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
 
-    html += this._sectionTitle('3. Diseño Estructural — Punzonamiento (Corte en 2 Direcciones)');
-    html += `<p class="text-xs text-slate-600 mb-2">Perímetro crítico a d/2 de las caras de la columna (d promedio = ${(str.punching.d_avg * 100).toFixed(1)} cm), bo = ${(str.punching.bo * 100).toFixed(1)} cm, βc = ${str.punching.betaC.toFixed(2)}.</p>`;
-    html += this._table(['', 'Valor'], [
-      ['Carga última en columna (Pu)', `${knToKg(str.Pu).toFixed(0)} kg`],
-      ['Cortante actuante Vu (Pu − qu·área crítica)', `${knToKg(str.punching.Vu).toFixed(0)} kg`],
-      ['Vc1 = 0.53(1+2/βc)√f\'c·bo·d', `${knToKg(str.punching.Vc1).toFixed(0)} kg`],
-      ['Vc2 = 0.27(αs·d/bo+2)√f\'c·bo·d', `${knToKg(str.punching.Vc2).toFixed(0)} kg`],
-      ['Vc3 = 1.06√f\'c·bo·d', `${knToKg(str.punching.Vc3).toFixed(0)} kg`],
-      ['φVc (mínimo de los 3, φ=0.85)', `${knToKg(str.punching.phiVc).toFixed(0)} kg`],
-      ['Verificación Vu ≤ φVc', this._badgeHtml(str.punching.pass)],
-    ]);
+    html += this._slabReportHtml(str, d.L, d.B, 3);
 
-    html += this._sectionTitle('4. Diseño Estructural — Corte en Una Dirección y Flexión');
-    [['L', str.L_dir, d.L], ['B', str.B_dir, d.B]].forEach(([axis, res, dim]) => {
-      html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">4.${axis === 'L' ? '1' : '2'} Franja dirección ${axis} (voladizo lado ${res.strip.side}, Lc = ${res.strip.Lc.toFixed(3)} m)</h3>`;
-      html += this._table(['', 'Valor'], [
-        ['Momento último Mu (en la cara de la columna)', `${kNmToKgm(res.strip.M).toFixed(0)} kg·m`],
-        ['Cortante último Vu (a "d" de la cara)', `${knToKg(res.shear.V).toFixed(0)} kg`],
-        [`Peralte efectivo d`, `${((axis === 'L' ? str.d_L : str.d_B) * 100).toFixed(1)} cm`],
-        ['φVc (corte en una dirección)', `${knToKg(res.phiVc).toFixed(0)} kg`],
-        ['Verificación por corte Vu ≤ φVc', this._badgeHtml(res.pass_shear)],
-        ['Cuantía de diseño ρ', res.flex.rho_design.toFixed(4)],
-        ['Acero requerido (As)', `${res.flex.As_design.toFixed(2)} cm² (${res.As_per_m.toFixed(2)} cm²/m)`],
-      ]);
-    });
-
-    html += this._sectionTitle('5. Distribución del Acero — Franja del Lado Corto (ACI 318 15.4.4 / E.060)');
-    html += `<p class="text-xs text-slate-600 mb-2">β = lado largo/lado corto = ${str.beta.toFixed(2)}. Fracción en banda central = 2/(β+1) = ${str.bandFactor.toFixed(3)}. Ancho de banda = ${str.banding.bandWidth.toFixed(2)} m (igual al lado corto), centrada en la columna.</p>`;
-    html += this._table(['Zona', 'As requerido', 'Armado colocado'], [
-      ['Banda central', `${str.banding.As_band_per_m.toFixed(2)} cm²/m`, `${str.dbMain.name} @ ${str.banding.sp_band} cm`],
-      ['Franjas exteriores (c/u)', str.banding.sp_outer ? `${str.banding.As_outer_per_m.toFixed(2)} cm²/m` : 'Acero mínimo', str.banding.sp_outer ? `${str.dbMain.name} @ ${str.banding.sp_outer} cm` : `${str.dbMain.name} @ ${str.banding.sp_band} cm (continúa igual)`],
-      ['Dirección larga (uniforme en todo el ancho)', `${(str.isLLong ? str.L_dir.As_per_m : str.B_dir.As_per_m).toFixed(2)} cm²/m`, `${str.dbMain.name} @ ${str.isLLong ? str.L_dir.spacing : str.B_dir.spacing} cm`],
-    ]);
-
-    html += this._sectionTitle('6. Longitud de Desarrollo');
-    html += this._table(['', 'Valor'], [
-      ['Longitud de desarrollo requerida (ld)', `${str.development.ld_req_cm.toFixed(1)} cm`],
-      ['Longitud disponible, dirección L (voladizo − recubrimiento)', `${str.development.ld_avail_L_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_L)}`],
-      ['Longitud disponible, dirección B (voladizo − recubrimiento)', `${str.development.ld_avail_B_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_B)}`],
-    ]);
-
-    html += this._sectionTitle('7. Cuadro de Habilitación de Acero');
+    html += this._sectionTitle('4. Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
 
     return html;
@@ -741,7 +702,8 @@ export class AppUIController {
     if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
 
     html += this._sectionTitle('3. Análisis Longitudinal (Viga Invertida) — Cargas Factoradas');
-    html += `<p class="text-xs text-slate-600 mb-2">Pu1 = ${knToKg(str.Pu1).toFixed(0)} kg, Pu2 = ${knToKg(str.Pu2).toFixed(0)} kg (U = 1.2D + 1.6L). Momento máximo positivo (voladizos, tracción inferior) M+ = ${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m en x = ${str.x_pos.toFixed(2)} m. Momento máximo negativo (entre columnas, tracción superior) M− = ${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m en x = ${str.x_neg.toFixed(2)} m.</p>`;
+    const LF_D = this.data.safety_req.LF_D ?? 1.4, LF_L = this.data.safety_req.LF_L ?? 1.7;
+    html += `<p class="text-xs text-slate-600 mb-2">Pu1 = ${knToKg(str.Pu1).toFixed(0)} kg, Pu2 = ${knToKg(str.Pu2).toFixed(0)} kg (U = ${LF_D}D + ${LF_L}L). Momento máximo positivo (voladizos, tracción inferior) M+ = ${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m en x = ${str.x_pos.toFixed(2)} m. Momento máximo negativo (entre columnas, tracción superior) M− = ${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m en x = ${str.x_neg.toFixed(2)} m.</p>`;
 
     html += this._sectionTitle('4. Acero Longitudinal Principal');
     html += this._table(['', 'Inferior (M+)', 'Superior (M−)'], [
@@ -774,7 +736,28 @@ export class AppUIController {
       ['Armado colocado', `${str.dbTrans.name} @ ${str.trans1.spacing} cm`, `${str.dbTrans.name} @ ${str.trans2.spacing} cm`],
     ]);
 
-    html += this._sectionTitle('8. Cuadro de Habilitación de Acero');
+    html += this._sectionTitle('8. Longitud de Desarrollo en Tracción (E.060 25.4.2)');
+    html += this._table(['', 'Valor'], [
+      ['Longitud de desarrollo requerida (ld)', `${str.development.ld_req_cm.toFixed(1)} cm`],
+      ['Longitud disponible, voladizo izquierdo', `${str.development.ld_avail_left_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_left)}`],
+      ['Longitud disponible, voladizo derecho', `${str.development.ld_avail_right_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_right)}`],
+    ]);
+
+    html += this._sectionTitle('9. Aplastamiento Columna-Zapata (E.060 10.17 / ACI 318 22.8)');
+    [['Columna 1', str.aplastamiento1, str.Pu1], ['Columna 2', str.aplastamiento2, str.Pu2]].forEach(([label, ap, Pu_i]) => {
+      html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">${label}</h3>`;
+      html += this._table(['', 'Valor'], [
+        ['Relación √(A2/A1) (limitada a 2.0)', ap.ratio.toFixed(2)],
+        ['φPn = φ·0.85·f\'c·A1·√(A2/A1)', `${ap.phiPn.toFixed(0)} kg`],
+        ['Carga última en la columna (Pu)', `${knToKg(Pu_i).toFixed(0)} kg`],
+        ['Verificación φPn ≥ Pu', this._badgeHtml(ap.pass)],
+      ]);
+      if (!ap.pass) {
+        html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ Requiere acero de arranque (dowels) adicional con As ≥ ${ap.As_dowel_cm2.toFixed(2)} cm².</p>`;
+      }
+    });
+
+    html += this._sectionTitle('10. Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
 
     return html;
@@ -815,12 +798,31 @@ export class AppUIController {
       ['Dirección larga (uniforme)', `${(slab.isLLong ? slab.L_dir.As_per_m : slab.B_dir.As_per_m).toFixed(2)} cm²/m`, `${slab.dbMain.name} @ ${slab.isLLong ? slab.L_dir.spacing : slab.B_dir.spacing} cm`],
     ]);
 
-    html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">${n}.5 Longitud de Desarrollo</h3>`;
+    html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">${n}.5 Longitud de Desarrollo en Tracción (E.060 25.4.2)</h3>`;
     html += this._table(['', 'Valor'], [
       ['Longitud de desarrollo requerida (ld)', `${slab.development.ld_req_cm.toFixed(1)} cm`],
-      ['Longitud disponible, dirección L', `${slab.development.ld_avail_L_cm.toFixed(1)} cm — ${this._badgeHtml(slab.development.pass_ld_L)}`],
-      ['Longitud disponible, dirección B', `${slab.development.ld_avail_B_cm.toFixed(1)} cm — ${this._badgeHtml(slab.development.pass_ld_B)}`],
+      ['Longitud disponible, dirección L (voladizo − recubrimiento)', `${slab.development.ld_avail_L_cm.toFixed(1)} cm — ${this._badgeHtml(slab.development.pass_ld_L)}`],
+      ['Longitud disponible, dirección B (voladizo − recubrimiento)', `${slab.development.ld_avail_B_cm.toFixed(1)} cm — ${this._badgeHtml(slab.development.pass_ld_B)}`],
     ]);
+
+    html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">${n}.6 Longitud de Desarrollo en Compresión de las Barras de Columna (E.060 25.4.9)</h3>`;
+    html += `<p class="text-xs text-slate-600 mb-2">Anclaje disponible para las barras de arranque (dowels) de la columna dentro del peralte de la zapata (se asume el mismo diámetro que el acero principal de la zapata).</p>`;
+    html += this._table(['', 'Valor'], [
+      ['Longitud de desarrollo requerida (ldc)', `${slab.development.ldc_req_cm.toFixed(1)} cm`],
+      ['Longitud disponible (h − recubrimiento − Ø)', `${slab.development.ldc_avail_cm.toFixed(1)} cm — ${this._badgeHtml(slab.development.pass_ldc)}`],
+    ]);
+
+    html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">${n}.7 Aplastamiento Columna-Zapata (E.060 10.17 / ACI 318 22.8)</h3>`;
+    const ap = slab.aplastamiento;
+    html += this._table(['', 'Valor'], [
+      ['Relación √(A2/A1) (limitada a 2.0)', ap.ratio.toFixed(2)],
+      ['φPn = φ·0.85·f\'c·A1·√(A2/A1)', `${ap.phiPn.toFixed(0)} kg`],
+      ['Carga última en la columna (Pu)', `${knToKg(slab.Pu).toFixed(0)} kg`],
+      ['Verificación φPn ≥ Pu', this._badgeHtml(ap.pass)],
+    ]);
+    if (!ap.pass) {
+      html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ El aplastamiento no se satisface directamente: se requiere acero de arranque (dowels) adicional con As ≥ ${ap.As_dowel_cm2.toFixed(2)} cm² para transmitir el excedente de carga (φ·As·fy = Pu − φPn).</p>`;
+    }
     return html;
   }
 
@@ -840,12 +842,15 @@ export class AppUIController {
       ['Viga de conexión (ancho × peralte)', `${d.strap_width.toFixed(2)} × ${d.strap_height.toFixed(2)} m`],
       ['Carga de servicio Columna 1 (D/L)', `${d.P1d.toFixed(1)} / ${d.P1l.toFixed(1)} tn`],
       ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(1)} / ${d.P2l.toFixed(1)} tn`],
+      ['Momento neto Columna 1 (D/L)', `${d.M1_d.toFixed(1)} / ${d.M1_l.toFixed(1)} tn·m`],
+      ['Momento neto Columna 2 (D/L)', `${d.M2_d.toFixed(1)} / ${d.M2_l.toFixed(1)} tn·m`],
       ['Capacidad portante admisible (q_adm)', `${fnd.q_adm_kgcm2.toFixed(2)} kg/cm²`],
       [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
     ]);
 
     html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio) — Método de la Viga Rígida');
-    html += `<p class="text-xs text-slate-600 mb-2">La columna 1 no puede centrarse en su zapata (límite de propiedad): excentricidad e1 = L1/2 − col1_L/2 = ${(geo.e1 * 100).toFixed(2)} cm. Para que la Zapata 1 trabaje con presión <b>uniforme</b>, la viga de conexión transmite una fuerza R = ${geo.R_tn.toFixed(2)} tn hacia la Zapata 2. De la estática del conjunto (ΣFy=0, ΣM=0 respecto al límite de propiedad): N1 = P1·s/(s−e1) = ${geo.N1_tn.toFixed(2)} tn, N2 = P1+P2−N1 = ${geo.N2_tn.toFixed(2)} tn.</p>`;
+    const hasM = Math.abs(geo.M1_tn) > 0.001 || Math.abs(geo.M2_tn) > 0.001;
+    html += `<p class="text-xs text-slate-600 mb-2">La columna 1 no puede centrarse en su zapata (límite de propiedad): excentricidad e1 = L1/2 − col1_L/2 = ${(geo.e1 * 100).toFixed(2)} cm. Para que la Zapata 1 trabaje con presión <b>uniforme</b>, la viga de conexión transmite una fuerza R = ${geo.R_tn.toFixed(2)} tn hacia la Zapata 2. Tomando momentos respecto al centroide de la Zapata 1 (ΣFy=0, ΣM=0)${hasM ? `, incluyendo el momento neto de cada columna (M1=${geo.M1_tn.toFixed(2)}, M2=${geo.M2_tn.toFixed(2)} tn·m)` : ''}: N2 = P2 − P1·e1/(s−e1) + (M1+M2)/(s−e1) = ${geo.N2_tn.toFixed(2)} tn, N1 = P1+P2−N2 = ${geo.N1_tn.toFixed(2)} tn.</p>`;
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
       ['Reacción N2 positiva (método aplicable)', `${geo.N2_tn.toFixed(2)} tn`, '> 0', this._badgeHtml(geo.pass_positive_reaction)],
       ['Presión de contacto Zapata 1 (q1)', `${geo.q1_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.pass_bearing_1)],

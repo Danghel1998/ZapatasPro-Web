@@ -35,16 +35,20 @@ export function calculateConnectedStructural(footingData) {
   const dbMain = REBAR_TABLE[materials.rebar_main_id] ?? REBAR_TABLE[2];
   const rebarTrans = REBAR_TABLE[materials.rebar_trans_id] ?? REBAR_TABLE[1];
 
-  const LF_D = safety_req.LF_D ?? 1.2;
-  const LF_L = safety_req.LF_L ?? 1.6;
+  const LF_D = safety_req.LF_D ?? 1.4;
+  const LF_L = safety_req.LF_L ?? 1.7;
 
   const Pu1 = LF_D * tnToKn(connected.P1d) + LF_L * tnToKn(connected.P1l);
   const Pu2 = LF_D * tnToKn(connected.P2d) + LF_L * tnToKn(connected.P2l);
+  const Mu1 = LF_D * tnToKn(connected.M1_d) + LF_L * tnToKn(connected.M1_l);
+  const Mu2 = LF_D * tnToKn(connected.M2_d) + LF_L * tnToKn(connected.M2_l);
 
+  // Mismo método de la viga rígida (generalizado con momento) que
+  // calculateConnectedBearing, con cargas factoradas.
   const e1 = L1 / 2.0 - col1_L / 2.0;
-  const Nu1 = (Pu1 * s) / (s - e1);
+  const Nu2 = Pu2 - (Pu1 * e1) / (s - e1) + (Mu1 + Mu2) / (s - e1);
+  const Nu1 = Pu1 + Pu2 - Nu2;
   const Ru = Nu1 - Pu1;
-  const Nu2 = Pu1 + Pu2 - Nu1;
 
   // -------------------------------------------------------------------
   // 1. LOSA DE LA ZAPATA 1 (excéntrica) — presión uniforme Nu1/A1, columna
@@ -70,7 +74,14 @@ export function calculateConnectedStructural(footingData) {
 
   // -------------------------------------------------------------------
   // 3. VIGA DE CONEXIÓN ("strap beam"): cortante constante Ru, momento
-  //    lineal de Ru·s (en la Zapata 1) a 0 (en la Zapata 2).
+  //    lineal de Ru·s (en la Zapata 1) a 0 (en la Zapata 2) — exacto
+  //    cuando no hay momento aplicado en las columnas (M1=M2=0, caso
+  //    verificado analíticamente: Ru·s ≡ Nu1·e1 por dos vías de cálculo
+  //    independientes). Con momento en las columnas esta expresión sigue
+  //    siendo una aproximación razonable (usa el Ru ya ajustado por
+  //    momento); para un caso con momentos importantes, conviene
+  //    verificar la viga con un análisis exacto del diagrama de momento
+  //    flector, como en la memoria de referencia (resuelto con software).
   // -------------------------------------------------------------------
   const Mu_strap = Ru * s;
   const d_beam = strap_height - cover - dbMain.diameter_m / 2.0;
@@ -106,7 +117,7 @@ export function calculateConnectedStructural(footingData) {
   }
 
   return {
-    Pu1, Pu2, e1, Nu1, Nu1_kg: knToKg(Nu1), Ru, Ru_kg: knToKg(Ru), Nu2, Nu2_kg: knToKg(Nu2),
+    Pu1, Pu2, Mu1, Mu2, e1, Nu1, Nu1_kg: knToKg(Nu1), Ru, Ru_kg: knToKg(Ru), Nu2, Nu2_kg: knToKg(Nu2),
     slab1, slab2,
     strap: {
       Mu: Mu_strap, Mu_kgm: kNmToKgm(Mu_strap),

@@ -19,6 +19,7 @@ import { REBAR_TABLE } from '../constants.js';
 import { tnToKn, kgcm2ToMpa } from './units.js';
 import {
   calcRequiredRebar, calcSpacing, oneWayShearCapacity_kN, punchingShearCapacity_kN,
+  ldTraccion_cm, verificarAplastamiento,
   PHI_FLEX, PHI_SHEAR,
 } from './concreteDesign.js';
 
@@ -47,8 +48,8 @@ export function calculateCombinedStructural(footingData) {
   const dbMain = REBAR_TABLE[materials.rebar_main_id] ?? REBAR_TABLE[2];
   const dbTrans = REBAR_TABLE[materials.rebar_trans_id] ?? REBAR_TABLE[1];
 
-  const LF_D = safety_req.LF_D ?? 1.2;
-  const LF_L = safety_req.LF_L ?? 1.6;
+  const LF_D = safety_req.LF_D ?? 1.4;
+  const LF_L = safety_req.LF_L ?? 1.7;
 
   const Pu1 = LF_D * tnToKn(combined.P1d) + LF_L * tnToKn(combined.P1l);
   const Pu2 = LF_D * tnToKn(combined.P2d) + LF_L * tnToKn(combined.P2l);
@@ -97,8 +98,8 @@ export function calculateCombinedStructural(footingData) {
   const d_main = h - cover - dbMain.diameter_m / 2.0;
   const d_trans = h - cover - dbMain.diameter_m - dbTrans.diameter_m / 2.0;
 
-  const flexBottom = calcRequiredRebar(Mu_pos, fc, fy, B, d_main, PHI_FLEX); // acero inferior (voladizos)
-  const flexTop = calcRequiredRebar(Mu_neg, fc, fy, B, d_main, PHI_FLEX); // acero superior (entre columnas)
+  const flexBottom = calcRequiredRebar(Mu_pos, fc, fy, B, d_main, PHI_FLEX, h); // acero inferior (voladizos)
+  const flexTop = calcRequiredRebar(Mu_neg, fc, fy, B, d_main, PHI_FLEX, h); // acero superior (entre columnas)
   const AsBottom_per_m = flexBottom.As_design / B;
   const AsTop_per_m = flexTop.As_design / B;
   const sp_bottom = calcSpacing(AsBottom_per_m, dbMain.area_cm2);
@@ -147,12 +148,34 @@ export function calculateCombinedStructural(footingData) {
     const voladizo = (B - colB) / 2.0;
     const q_local = q_u_local(xCenter);
     const Mu = q_local * voladizo * voladizo / 2.0; // por metro de longitud (kN·m/m)
-    const flex = calcRequiredRebar(Mu, fc, fy, 1.0, d_trans, PHI_FLEX);
+    const flex = calcRequiredRebar(Mu, fc, fy, 1.0, d_trans, PHI_FLEX, h);
     const spacing = calcSpacing(flex.As_design, dbTrans.area_cm2);
     return { voladizo, q_local, Mu, flex, spacing };
   }
   const trans1 = transverseForColumn(col1_B, a1);
   const trans2 = transverseForColumn(col2_B, a2);
+
+  // -------------------------------------------------------------------
+  // APLASTAMIENTO columna-zapata (E.060 10.17 / ACI 318 22.8), por columna
+  // -------------------------------------------------------------------
+  function aplastamientoForColumn(colL, colB, Pu_i) {
+    const Pu_kg = (Pu_i * 1000.0) / 9.80665;
+    const A1_cm2 = (colL * 100.0) * (colB * 100.0);
+    const A2_cm2 = (L * 100.0) * (B * 100.0);
+    return verificarAplastamiento(Pu_kg, fc_kgcm2, A1_cm2, A2_cm2, fy_kgcm2);
+  }
+  const aplastamiento1 = aplastamientoForColumn(col1_L, col1_B, Pu1);
+  const aplastamiento2 = aplastamientoForColumn(col2_L, col2_B, Pu2);
+
+  // -------------------------------------------------------------------
+  // LONGITUD DE DESARROLLO EN TRACCIÓN del acero longitudinal principal,
+  // disponible desde la cara de cada columna hasta el extremo respectivo
+  // -------------------------------------------------------------------
+  const ld_req_cm = ldTraccion_cm(fy_kgcm2, fc_kgcm2, dbMain.diameter_mm);
+  const ld_avail_left_cm = Math.max(0, a1 - col1_L / 2) * 100.0 - cover * 100.0;
+  const ld_avail_right_cm = Math.max(0, L - (a2 + col2_L / 2)) * 100.0 - cover * 100.0;
+  const pass_ld_left = ld_avail_left_cm >= ld_req_cm;
+  const pass_ld_right = ld_avail_right_cm >= ld_req_cm;
 
   return {
     L, B, h, A, Df, a1, a2, s,
@@ -165,7 +188,10 @@ export function calculateCombinedStructural(footingData) {
     shearChecks, phiVc_oneWay, pass_shear_oneWay,
     punch1, punch2, perimetersOverlap, halfGapAvailable,
     trans1, trans2,
+    aplastamiento1, aplastamiento2,
+    development: { ld_req_cm, ld_avail_left_cm, ld_avail_right_cm, pass_ld_left, pass_ld_right },
     fc, fy, fc_kgcm2, fy_kgcm2,
-    pass_all_structural: pass_shear_oneWay && punch1.pass && punch2.pass,
+    pass_all_structural: pass_shear_oneWay && punch1.pass && punch2.pass
+      && aplastamiento1.pass && aplastamiento2.pass && pass_ld_left && pass_ld_right,
   };
 }

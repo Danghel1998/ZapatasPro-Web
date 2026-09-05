@@ -154,11 +154,18 @@ export function calculateConnectedBearing(footingData) {
 
   const P1 = tnToKn(connected.P1d + connected.P1l);
   const P2 = tnToKn(connected.P2d + connected.P2l);
+  const M1 = tnToKn(connected.M1_d + connected.M1_l);
+  const M2 = tnToKn(connected.M2_d + connected.M2_l);
 
+  // Método de la viga rígida, generalizado con el momento neto de cada
+  // columna (además de la excentricidad geométrica e1 de la Zapata 1):
+  // tomando momentos respecto al centroide de la Zapata 1 (mismo criterio
+  // que la memoria de referencia UNI, "sentido horario positivo" — un
+  // momento positivo aumenta la reacción de la Zapata 2).
   const e1 = L1 / 2.0 - col1_L / 2.0;
-  const N1 = (P1 * s) / (s - e1);
+  const N2 = P2 - (P1 * e1) / (s - e1) + (M1 + M2) / (s - e1);
+  const N1 = P1 + P2 - N2;
   const R = N1 - P1;
-  const N2 = P1 + P2 - N1;
 
   const A1 = L1 * B1, A2 = L2 * B2;
   const W1 = gamma_c * A1 * h1 + gamma_s * A1 * Math.max(0, Df - h1);
@@ -176,6 +183,7 @@ export function calculateConnectedBearing(footingData) {
   return {
     L1, B1, h1, L2, B2, h2, A1, A2, Df,
     P1_tn: connected.P1d + connected.P1l, P2_tn: connected.P2d + connected.P2l,
+    M1_tn: connected.M1_d + connected.M1_l, M2_tn: connected.M2_d + connected.M2_l,
     e1, s,
     N1, N1_tn: knToTn(N1), R, R_tn: knToTn(R), N2, N2_tn: knToTn(N2),
     W1_tn: knToTn(W1), W2_tn: knToTn(W2),

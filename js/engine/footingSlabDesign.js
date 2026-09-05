@@ -16,7 +16,7 @@
  */
 
 import {
-  calcRequiredRebar, calcSpacing, ldBasic_cm,
+  calcRequiredRebar, calcSpacing, ldTraccion_cm, ldCompresion_cm, verificarAplastamiento,
   oneWayShearCapacity_kN, punchingShearCapacity_kN, analyzeCantileverStrip,
   PHI_FLEX, PHI_SHEAR,
 } from './concreteDesign.js';
@@ -56,7 +56,7 @@ export function designFootingSlab(p) {
   const stripL = stripL_pos.M >= stripL_neg.M ? { ...stripL_pos, side: 'positivo (+X)' } : { ...stripL_neg, side: 'negativo (−X)' };
   const stripL_shear = stripL_pos.V >= stripL_neg.V ? stripL_pos : stripL_neg;
 
-  const flexL = calcRequiredRebar(stripL.M, fc, fy, B, d_L, PHI_FLEX);
+  const flexL = calcRequiredRebar(stripL.M, fc, fy, B, d_L, PHI_FLEX, h);
   const AsL_per_m = flexL.As_design / B;
   const VcL = oneWayShearCapacity_kN(fc_kgcm2, B, d_L);
   const phiVcL = PHI_SHEAR * VcL;
@@ -69,7 +69,7 @@ export function designFootingSlab(p) {
   const stripB = stripB_pos.M >= stripB_neg.M ? { ...stripB_pos, side: 'positivo (+Y)' } : { ...stripB_neg, side: 'negativo (−Y)' };
   const stripB_shear = stripB_pos.V >= stripB_neg.V ? stripB_pos : stripB_neg;
 
-  const flexB = calcRequiredRebar(stripB.M, fc, fy, L, d_B, PHI_FLEX);
+  const flexB = calcRequiredRebar(stripB.M, fc, fy, L, d_B, PHI_FLEX, h);
   const AsB_per_m = flexB.As_design / L;
   const VcB = oneWayShearCapacity_kN(fc_kgcm2, L, d_B);
   const phiVcB = PHI_SHEAR * VcB;
@@ -103,11 +103,27 @@ export function designFootingSlab(p) {
   const phiVc_punch = PHI_SHEAR * punchCap.Vc_kN;
   const pass_punching = Vu_punch <= phiVc_punch;
 
-  const ld_req_cm = ldBasic_cm(fy, fc, dbMain.diameter_mm);
+  const ld_req_cm = ldTraccion_cm(p.fy_kgcm2, fc_kgcm2, dbMain.diameter_mm);
   const ld_avail_L_cm = Math.max(stripL_pos.Lc, stripL_neg.Lc) * 100.0 - cover * 100.0;
   const ld_avail_B_cm = Math.max(stripB_pos.Lc, stripB_neg.Lc) * 100.0 - cover * 100.0;
   const pass_ld_L = ld_avail_L_cm >= ld_req_cm;
   const pass_ld_B = ld_avail_B_cm >= ld_req_cm;
+
+  // -------------------------------------------------------------------
+  // APLASTAMIENTO columna-zapata (E.060 10.17 / ACI 318 22.8) y longitud de
+  // desarrollo en compresión de las barras de la columna que penetran en
+  // la zapata (dowels) — se asume el mismo diámetro de barra que el acero
+  // principal de la zapata, ya que esta herramienta no modela el refuerzo
+  // propio de la columna.
+  // -------------------------------------------------------------------
+  const Pu_kg = (Pu * 1000.0) / 9.80665;
+  const A1_col_cm2 = (col_L * 100.0) * (col_B * 100.0);
+  const A2_zap_cm2 = (L * 100.0) * (B * 100.0);
+  const aplastamiento = verificarAplastamiento(Pu_kg, fc_kgcm2, A1_col_cm2, A2_zap_cm2, p.fy_kgcm2);
+
+  const ldc_req_cm = ldCompresion_cm(p.fy_kgcm2, fc_kgcm2, dbMain.diameter_mm);
+  const ldc_avail_cm = h * 100.0 - cover * 100.0 - dbMain.diameter_mm / 10.0;
+  const pass_ldc = ldc_avail_cm >= ldc_req_cm;
 
   return {
     L, B, h, col_L, col_B, Pu, Mu_x, Mu_y, A, d_L, d_B, d_avg, isLLong, beta, bandFactor, shortIsL, shortSide, longSide,
@@ -132,8 +148,12 @@ export function designFootingSlab(p) {
       Vc1: punchCap.Vc1_kN, Vc2: punchCap.Vc2_kN, Vc3: punchCap.Vc3_kN,
       Vc: punchCap.Vc_kN, phiVc: phiVc_punch, pass: pass_punching,
     },
-    development: { ld_req_cm, ld_avail_L_cm, ld_avail_B_cm, pass_ld_L, pass_ld_B },
+    development: {
+      ld_req_cm, ld_avail_L_cm, ld_avail_B_cm, pass_ld_L, pass_ld_B,
+      ldc_req_cm, ldc_avail_cm, pass_ldc,
+    },
+    aplastamiento,
     fc, fy, fc_kgcm2, fy_kgcm2: p.fy_kgcm2,
-    pass_all_structural: pass_shear_L && pass_shear_B && pass_punching && pass_ld_L && pass_ld_B,
+    pass_all_structural: pass_shear_L && pass_shear_B && pass_punching && pass_ld_L && pass_ld_B && pass_ldc,
   };
 }

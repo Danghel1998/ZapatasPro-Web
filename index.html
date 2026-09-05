@@ -217,6 +217,11 @@
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="connected.P1d"></div>
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="connected.P1l"><span class="eng-unit-badge">tn</span></div>
                 </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento neto muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="connected.M1_d"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="connected.M1_l"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
             </div>
           </div>
 
@@ -241,6 +246,11 @@
                 <div class="flex gap-1">
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="connected.P2d"></div>
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="connected.P2l"><span class="eng-unit-badge">tn</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento neto muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="connected.M2_d"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="connected.M2_l"><span class="eng-unit-badge">tn·m</span></div>
                 </div></div>
             </div>
           </div>
@@ -331,7 +341,7 @@
               <div><label class="text-xs font-semibold text-slate-700">Factor carga viva</label>
                 <input type="number" step="0.05" class="eng-cell-input border border-slate-300 rounded w-full text-right" data-bind="safety_req.LF_L"></div>
             </div>
-            <p class="text-[10px] text-slate-400 mt-2">Por defecto U = 1.2D + 1.6L (E.060 / ACI 318 vigente).</p>
+            <p class="text-[10px] text-slate-400 mt-2">Por defecto U = 1.4D + 1.7L (metodología del curso, E.060).</p>
           </div>
 
           <div class="eng-card">
