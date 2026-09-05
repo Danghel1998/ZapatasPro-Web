@@ -585,6 +585,8 @@ export class FootingCanvasRenderer {
     ctx.beginPath(); ctx.rect(t.toX(c2 - col2_L / 2), t.toY(h2 + stemH), col2_L * t.scale, stemH * t.scale); ctx.fill(); ctx.stroke();
     ctx.restore();
 
+    this._drawStrapReinforcement(ctx, t, c1, c2, strapY);
+
     ctx.save();
     ctx.strokeStyle = '#dc2626';
     ctx.setLineDash([6, 4]);
@@ -603,6 +605,42 @@ export class FootingCanvasRenderer {
     ctx.restore();
 
     this._dimLine(ctx, t.toX(0), t.toY(0), t.toX(f2x0 + L2), t.toY(0), `s = ${s.toFixed(2)} m (ejes de columna)`, 26);
+  }
+
+  /** Acero longitudinal (superior/inferior) y estribos de la viga de
+   * conexión, dibujados en elevación — el espaciamiento de estribos es el
+   * mismo que ya calculó el motor estructural (str.strap.stirrup_spacing_cm). */
+  _drawStrapReinforcement(ctx, t, c1, c2, strapY) {
+    const str = this.structResults;
+    if (!str) return;
+    const { connected, materials } = this.footingData;
+    const strap = str.strap;
+    const cover = materials.cover_footing;
+    const yTop = strapY + connected.strap_height - cover;
+    const yBot = strapY + cover;
+
+    ctx.save();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(t.toX(c1 + cover), t.toY(yTop)); ctx.lineTo(t.toX(c2 - cover), t.toY(yTop)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(t.toX(c1 + cover), t.toY(yBot)); ctx.lineTo(t.toX(c2 - cover), t.toY(yBot)); ctx.stroke();
+
+    const sp = Math.max(0.03, strap.stirrup_spacing_cm / 100);
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth = 1.2;
+    for (let x = c1 + sp / 2; x <= c2 - sp / 2 + 1e-6; x += sp) {
+      ctx.beginPath();
+      ctx.moveTo(t.toX(x), t.toY(yTop));
+      ctx.lineTo(t.toX(x), t.toY(yBot));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = '10px Inter, sans-serif';
+    ctx.fillStyle = '#334155';
+    ctx.fillText(`Estribos ${strap.rebarTrans.name} @ ${strap.stirrup_spacing_cm} cm`, t.toX(c1), t.toY(yTop) - 6);
+    ctx.restore();
   }
 
   renderDiagram(width, height) {

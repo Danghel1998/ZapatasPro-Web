@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { hookMainBar_m } from '../engine/concreteDesign.js';
 
 const COLORS_ISOLATED = {
   long_dir: 0x2563eb,   // Acero dirección larga (uniforme) — azul
@@ -29,6 +30,7 @@ const COLORS_CONNECTED = {
   slab2: 0xdc2626,       // Malla de la Zapata 2 (interior) — rojo
   strap_top: 0xf97316,   // Acero superior de la viga de conexión — naranja
   strap_bottom: 0xeab308, // Acero inferior de la viga de conexión — amarillo
+  strap_stirrups: 0x16a34a, // Estribos de la viga de conexión — verde
   dowels: 0x64748b,
 };
 
@@ -189,6 +191,19 @@ export class FootingRenderer3D {
     if (mesh) this.rebarSubgroups[key].add(mesh);
   }
 
+  /** Barra recta con gancho estándar a 90° en ambos extremos (E.060 / ACI
+   * 318 25.3.1: extensión de 12·db), doblado hacia arriba (`bendUp=true`,
+   * barras de la capa inferior) o hacia abajo (capa superior) — la
+   * longitud del gancho depende del diámetro real de la propia barra, no
+   * de un valor fijo. */
+  _addBarWithHooks(p1, p2, radius, key, diameter_m, bendUp = true) {
+    this._addBar(p1, p2, radius, key);
+    const hookLen = hookMainBar_m(diameter_m) * 0.6; // 60%: representación esquemática, no a escala real de 12·db
+    const bend = new THREE.Vector3(0, bendUp ? 1 : -1, 0).multiplyScalar(hookLen);
+    this._addBar(p1, p1.clone().add(bend), radius, key);
+    this._addBar(p2, p2.clone().add(bend), radius, key);
+  }
+
   _addConcreteBox(cx, cy, cz, sx, sy, sz) {
     const geometry = new THREE.BoxGeometry(sx, sy, sz);
     const material = new THREE.MeshStandardMaterial({
@@ -219,7 +234,6 @@ export class FootingRenderer3D {
     const V = (x, y, z) => new THREE.Vector3(x, y, z);
     const dbMain = str.dbMain;
     const rMain = dbMain.diameter_m / 2;
-    const hook = Math.max(0.08, dbMain.diameter_m * 12);
 
     const longIsL = str.isLLong;
     const yLow = cover + rMain; // capa inferior (dirección larga)
@@ -240,8 +254,8 @@ export class FootingRenderer3D {
     const longRunHalf = (longAxisIsX ? L : B) / 2 - cover;
     const longSpreadHalf = (longAxisIsX ? B : L) / 2;
     positionsIn(longSpacing, longSpreadHalf).forEach((p) => {
-      if (longAxisIsX) this._addBar(V(-longRunHalf, yLongDir, p), V(longRunHalf, yLongDir, p), rMain, 'long_dir');
-      else this._addBar(V(p, yLongDir, -longRunHalf), V(p, yLongDir, longRunHalf), rMain, 'long_dir');
+      if (longAxisIsX) this._addBarWithHooks(V(-longRunHalf, yLongDir, p), V(longRunHalf, yLongDir, p), rMain, 'long_dir', dbMain.diameter_m);
+      else this._addBarWithHooks(V(p, yLongDir, -longRunHalf), V(p, yLongDir, longRunHalf), rMain, 'long_dir', dbMain.diameter_m);
     });
 
     // Dirección corta: banda central + franjas exteriores
@@ -249,16 +263,16 @@ export class FootingRenderer3D {
     const shortRunHalf = (shortAxisIsX ? L : B) / 2 - cover;
     const bandHalf = str.banding.bandWidth / 2;
     positionsIn(str.banding.sp_band, bandHalf).forEach((p) => {
-      if (shortAxisIsX) this._addBar(V(-shortRunHalf, yShortDir, p), V(shortRunHalf, yShortDir, p), rMain, 'short_band');
-      else this._addBar(V(p, yShortDir, -shortRunHalf), V(p, yShortDir, shortRunHalf), rMain, 'short_band');
+      if (shortAxisIsX) this._addBarWithHooks(V(-shortRunHalf, yShortDir, p), V(shortRunHalf, yShortDir, p), rMain, 'short_band', dbMain.diameter_m);
+      else this._addBarWithHooks(V(p, yShortDir, -shortRunHalf), V(p, yShortDir, shortRunHalf), rMain, 'short_band', dbMain.diameter_m);
     });
     if (str.banding.sp_outer) {
       const outerTo = (shortAxisIsX ? B : L) / 2;
       const s = Math.max(0.03, str.banding.sp_outer / 100);
       for (let p = bandHalf + s / 2; p <= outerTo - s / 2 + 1e-6; p += s) {
         [p, -p].forEach((pp) => {
-          if (shortAxisIsX) this._addBar(V(-shortRunHalf, yShortDir, pp), V(shortRunHalf, yShortDir, pp), rMain, 'short_outer');
-          else this._addBar(V(pp, yShortDir, -shortRunHalf), V(pp, yShortDir, shortRunHalf), rMain, 'short_outer');
+          if (shortAxisIsX) this._addBarWithHooks(V(-shortRunHalf, yShortDir, pp), V(shortRunHalf, yShortDir, pp), rMain, 'short_outer', dbMain.diameter_m);
+          else this._addBarWithHooks(V(pp, yShortDir, -shortRunHalf), V(pp, yShortDir, shortRunHalf), rMain, 'short_outer', dbMain.diameter_m);
         });
       }
     }
@@ -316,10 +330,10 @@ export class FootingRenderer3D {
     };
 
     positionsIn(str.bottom.spacing, zHalf).forEach((z) => {
-      this._addBar(V(cover, yBottom, z), V(L - cover, yBottom, z), rMain, 'bottom_long');
+      this._addBarWithHooks(V(cover, yBottom, z), V(L - cover, yBottom, z), rMain, 'bottom_long', dbMain.diameter_m, true);
     });
     positionsIn(str.top.spacing, zHalf).forEach((z) => {
-      this._addBar(V(cover, yTop, z), V(L - cover, yTop, z), rMain, 'top_long');
+      this._addBarWithHooks(V(cover, yTop, z), V(L - cover, yTop, z), rMain, 'top_long', dbMain.diameter_m, false);
     });
 
     // Franja de reparto de cada columna: desde el borde de la zapata más
@@ -328,10 +342,10 @@ export class FootingRenderer3D {
     // de [cover, L-cover] para que ninguna barra sobresalga del sólido.
     const xMid = (a1 + a2) / 2;
     positionsBetween(str.trans1.spacing, cover, Math.min(xMid, L - cover)).forEach((x) => {
-      this._addBar(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col1');
+      this._addBarWithHooks(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m);
     });
     positionsBetween(str.trans2.spacing, Math.max(xMid, cover), L - cover).forEach((x) => {
-      this._addBar(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col2');
+      this._addBarWithHooks(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m);
     });
 
     const yDowelTop = h + stemH - cover;
@@ -389,24 +403,24 @@ export class FootingRenderer3D {
       const longRunHalf = (longAxisIsX ? L : B) / 2 - cover;
       const longSpreadHalf = (longAxisIsX ? B : L) / 2;
       positionsIn(longSpacing, longSpreadHalf).forEach((p) => {
-        if (longAxisIsX) this._addBar(V(cx - longRunHalf, yLongDir, p), V(cx + longRunHalf, yLongDir, p), rMain, colorKey);
-        else this._addBar(V(cx + p, yLongDir, -longRunHalf), V(cx + p, yLongDir, longRunHalf), rMain, colorKey);
+        if (longAxisIsX) this._addBarWithHooks(V(cx - longRunHalf, yLongDir, p), V(cx + longRunHalf, yLongDir, p), rMain, colorKey, dbMain.diameter_m);
+        else this._addBarWithHooks(V(cx + p, yLongDir, -longRunHalf), V(cx + p, yLongDir, longRunHalf), rMain, colorKey, dbMain.diameter_m);
       });
 
       const shortAxisIsX = !longAxisIsX;
       const shortRunHalf = (shortAxisIsX ? L : B) / 2 - cover;
       const bandHalf = slab.banding.bandWidth / 2;
       positionsIn(slab.banding.sp_band, bandHalf).forEach((p) => {
-        if (shortAxisIsX) this._addBar(V(cx - shortRunHalf, yShortDir, p), V(cx + shortRunHalf, yShortDir, p), rMain, colorKey);
-        else this._addBar(V(cx + p, yShortDir, -shortRunHalf), V(cx + p, yShortDir, shortRunHalf), rMain, colorKey);
+        if (shortAxisIsX) this._addBarWithHooks(V(cx - shortRunHalf, yShortDir, p), V(cx + shortRunHalf, yShortDir, p), rMain, colorKey, dbMain.diameter_m);
+        else this._addBarWithHooks(V(cx + p, yShortDir, -shortRunHalf), V(cx + p, yShortDir, shortRunHalf), rMain, colorKey, dbMain.diameter_m);
       });
       if (slab.banding.sp_outer) {
         const outerTo = (shortAxisIsX ? B : L) / 2;
         const sp = Math.max(0.03, slab.banding.sp_outer / 100);
         for (let p = bandHalf + sp / 2; p <= outerTo - sp / 2 + 1e-6; p += sp) {
           [p, -p].forEach((pp) => {
-            if (shortAxisIsX) this._addBar(V(cx - shortRunHalf, yShortDir, pp), V(cx + shortRunHalf, yShortDir, pp), rMain, colorKey);
-            else this._addBar(V(cx + pp, yShortDir, -shortRunHalf), V(cx + pp, yShortDir, shortRunHalf), rMain, colorKey);
+            if (shortAxisIsX) this._addBarWithHooks(V(cx - shortRunHalf, yShortDir, pp), V(cx + shortRunHalf, yShortDir, pp), rMain, colorKey, dbMain.diameter_m);
+            else this._addBarWithHooks(V(cx + pp, yShortDir, -shortRunHalf), V(cx + pp, yShortDir, shortRunHalf), rMain, colorKey, dbMain.diameter_m);
           });
         }
       }
@@ -435,6 +449,21 @@ export class FootingRenderer3D {
     for (let i = 0; i < nBot; i++) {
       const z = nBot > 1 ? -zHalfStrap + (i * 2 * zHalfStrap) / (nBot - 1) : 0;
       this._addBar(V(c1, yStrapBot, z), V(c2, yStrapBot, z), rMain, 'strap_bottom');
+    }
+
+    // Estribos de la viga de conexión, como lazos rectangulares (4 tramos)
+    // en el plano Y-Z, espaciados a lo largo de su luz según el
+    // espaciamiento ya calculado por el motor estructural.
+    const rStirrup = str.strap.rebarTrans.diameter_m / 2;
+    const yStirrupTop = strapY0 + strap_height - cover;
+    const yStirrupBot = strapY0 + cover;
+    const zStirrupHalf = strap_width / 2 - cover;
+    const spStirrup = Math.max(0.03, str.strap.stirrup_spacing_cm / 100);
+    for (let x = c1 + spStirrup / 2; x <= c2 - spStirrup / 2 + 1e-6; x += spStirrup) {
+      this._addBar(V(x, yStirrupTop, -zStirrupHalf), V(x, yStirrupTop, zStirrupHalf), rStirrup, 'strap_stirrups');
+      this._addBar(V(x, yStirrupBot, -zStirrupHalf), V(x, yStirrupBot, zStirrupHalf), rStirrup, 'strap_stirrups');
+      this._addBar(V(x, yStirrupBot, -zStirrupHalf), V(x, yStirrupTop, -zStirrupHalf), rStirrup, 'strap_stirrups');
+      this._addBar(V(x, yStirrupBot, zStirrupHalf), V(x, yStirrupTop, zStirrupHalf), rStirrup, 'strap_stirrups');
     }
 
     this._buildAnnotationsConnected(fd, str, c1, c2, Math.max(stemH1, stemH2));

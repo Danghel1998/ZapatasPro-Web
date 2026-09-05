@@ -8,6 +8,22 @@
 export const PHI_FLEX = 0.90;
 export const PHI_SHEAR = 0.85; // E.060 9.3.2 (corte y punzonamiento)
 
+/** Gancho estándar a 90° de una barra principal (E.060 / ACI 318 25.3.1):
+ * extensión de 12·db más allá del doblez, para todo diámetro. Usado tanto
+ * para el metrado (cuadro de habilitación) como para dibujar el doblez en
+ * los visualizadores 2D/3D. */
+export function hookMainBar_m(diameter_m) {
+  return Math.max(0.10, diameter_m * 12.0);
+}
+
+/** Gancho de estribo (E.060 / ACI 318 25.3.2): la extensión depende del
+ * diámetro de la propia barra transversal — 6·db para Ø ≤ 5/8" (15.9 mm),
+ * 12·db para diámetros mayores (estribos de barra gruesa, poco usuales). */
+export function hookStirrup_m(diameter_mm, diameter_m) {
+  const factor = diameter_mm <= 15.9 ? 6.0 : 12.0;
+  return Math.max(0.075, diameter_m * factor);
+}
+
 /**
  * Acero requerido por flexión para una franja de ancho b_m, con la cuantía
  * mínima de losas/zapatas (E.060 9.7 / ACI 318 7.6.1, 0.18% como piso).

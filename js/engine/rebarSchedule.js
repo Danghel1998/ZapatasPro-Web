@@ -4,7 +4,9 @@
  * resultados ya calculados por el motor estructural.
  */
 
-const hookAllow = (diameter_m) => Math.max(0.10, diameter_m * 12.0);
+import { hookMainBar_m, hookStirrup_m } from './concreteDesign.js';
+
+const hookAllow = hookMainBar_m;
 
 function row(mark, element, rebar, shape, unitLength_m, quantity) {
   const qty = Math.max(0, Math.ceil(quantity));
@@ -100,7 +102,8 @@ export function calculateConnectedRebarSchedule(footingData, structResults) {
   pushSlabRows(rows, nextMark, 'Zapata 2', connected.L2, connected.B2, cover, str.slab2);
 
   const strap = str.strap;
-  const stirrupPerimeter = 2 * (strap.width - 2 * cover) + 2 * (strap.height - 2 * cover) + 2 * hookAllow(strap.rebarTrans.diameter_m);
+  const hookStirrup = hookStirrup_m(strap.rebarTrans.diameter_mm, strap.rebarTrans.diameter_m);
+  const stirrupPerimeter = 2 * (strap.width - 2 * cover) + 2 * (strap.height - 2 * cover) + 2 * hookStirrup;
   const strapClearSpan = Math.max(0.3, connected.s - connected.col1_L / 2.0 - connected.col2_L / 2.0);
 
   rows.push(row(nextMark(), 'Viga de conexión — Acero superior (momento máximo en Zapata 1)', str.dbMain, 'straight',

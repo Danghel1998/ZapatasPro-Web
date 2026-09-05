@@ -19,7 +19,7 @@ const CONNECTED_VIEW_MODES = ['plan', 'section', 'diagram', 'rebar', 'rebar3d'];
 
 const LEGEND_KEYS_ISOLATED = ['long_dir', 'short_band', 'short_outer', 'dowels'];
 const LEGEND_KEYS_COMBINED = ['bottom_long', 'top_long', 'trans_col1', 'trans_col2', 'dowels'];
-const LEGEND_KEYS_CONNECTED = ['slab1', 'slab2', 'strap_top', 'strap_bottom', 'dowels'];
+const LEGEND_KEYS_CONNECTED = ['slab1', 'slab2', 'strap_top', 'strap_bottom', 'strap_stirrups', 'dowels'];
 
 export class AppUIController {
   constructor() {
@@ -369,6 +369,7 @@ export class AppUIController {
         slab2: `Zapata 2 — ${str.dbMain.name} (ver planta para detalle)`,
         strap_top: `${str.dbMain.name} × ${str.strap.n_bars_top}`,
         strap_bottom: `${str.dbMain.name} × ${str.strap.n_bars_bottom}`,
+        strap_stirrups: `${str.strap.rebarTrans.name} @ ${str.strap.stirrup_spacing_cm} cm`,
         dowels: 'Referencial (arranque de columnas)',
       };
     }
