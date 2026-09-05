@@ -100,9 +100,24 @@ export function designFootingSlab(p) {
   const sp_short_outer = As_short_outer_per_m > 0.01 ? calcSpacing(As_short_outer_per_m, dbMain.area_cm2) : null;
   const sp_long_uniform = calcSpacing(shortIsL ? AsB_per_m : AsL_per_m, dbMain.area_cm2);
 
+  // Perímetro crítico de punzonamiento (a d/2 de cada cara de la columna),
+  // recortado a lo que realmente cabe dentro de la losa: si la columna es
+  // de borde o esquina (cara al ras del borde de la zapata), no hay
+  // concreto más allá de esa cara para que se desarrolle el d/2 de
+  // extensión, así que ese lado del perímetro queda con offset 0 en vez de
+  // extenderse fuera de la losa. Para una columna interior (o cualquier
+  // holgura ≥ d/2) esto se reduce exactamente a la fórmula de 4 lados
+  // completos de siempre.
   const d_avg = (d_L + d_B) / 2.0;
-  const bo = 2 * (col_L + d_avg) + 2 * (col_B + d_avg);
-  const areaWithinPerimeter = (col_L + d_avg) * (col_B + d_avg);
+  const halfD = d_avg / 2.0;
+  const offXpos = Math.min(halfD, Math.max(0, L / 2.0 - (ex_col + col_L / 2.0)));
+  const offXneg = Math.min(halfD, Math.max(0, (ex_col - col_L / 2.0) + L / 2.0));
+  const offYpos = Math.min(halfD, Math.max(0, B / 2.0 - (ey_col + col_B / 2.0)));
+  const offYneg = Math.min(halfD, Math.max(0, (ey_col - col_B / 2.0) + B / 2.0));
+  const critWidthX = col_L + offXpos + offXneg;
+  const critWidthY = col_B + offYpos + offYneg;
+  const bo = 2 * critWidthX + 2 * critWidthY;
+  const areaWithinPerimeter = critWidthX * critWidthY;
   const q_u_avg = Pu / A;
   const Vu_punch = Math.max(0, Pu - q_u_avg * areaWithinPerimeter);
   const betaC = Math.max(col_L, col_B) / Math.min(col_L, col_B);

@@ -24,6 +24,26 @@ import { evaluateEnvelope } from './seismicEnvelope.js';
 
 const ALPHA_S = { interior: 40, medianera: 30, esquinera: 20 };
 
+/**
+ * Posición de la columna dentro de la losa según el tipo elegido: una
+ * columna de borde/medianera se asume con su cara exterior al ras del
+ * borde de la zapata en la dirección larga (sin volado hacia ese lado,
+ * todo el volado disponible queda hacia el interior); una de esquina, al
+ * ras de ambos bordes (X e Y). Una columna interior queda centrada.
+ * Esta excentricidad es puramente geométrica (posición de la columna en
+ * planta) y es independiente de la excentricidad de carga (Mx/My).
+ */
+export function deriveColumnEccentricity(isolated) {
+  const { L, B, col_L, col_B, col_type } = isolated;
+  if (col_type === 'medianera') {
+    return { ex_col: L / 2 - col_L / 2, ey_col: 0 };
+  }
+  if (col_type === 'esquinera') {
+    return { ex_col: L / 2 - col_L / 2, ey_col: B / 2 - col_B / 2 };
+  }
+  return { ex_col: 0, ey_col: 0 };
+}
+
 export function calculateIsolatedStructural(footingData) {
   const { isolated, materials, safety_req, foundation } = footingData;
   const dbMain = REBAR_TABLE[materials.rebar_main_id] ?? REBAR_TABLE[2];

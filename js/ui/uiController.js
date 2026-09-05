@@ -5,7 +5,7 @@
 
 import { DEFAULT_FOOTING_DATA, PRESET_PROJECTS, REBAR_TABLE } from '../constants.js';
 import { calculateIsolatedBearing, calculateCombinedBearing, calculateConnectedBearing } from '../engine/soilBearing.js';
-import { calculateIsolatedStructural } from '../engine/isolatedFooting.js';
+import { calculateIsolatedStructural, deriveColumnEccentricity } from '../engine/isolatedFooting.js';
 import { calculateCombinedStructural } from '../engine/combinedFooting.js';
 import { calculateConnectedStructural } from '../engine/connectedFooting.js';
 import { calculateIsolatedRebarSchedule, calculateCombinedRebarSchedule, calculateConnectedRebarSchedule } from '../engine/rebarSchedule.js';
@@ -291,6 +291,9 @@ export class AppUIController {
   recalculateAndRender() {
     const type = this.data.footing_type;
     if (type === 'aislada') {
+      const { ex_col, ey_col } = deriveColumnEccentricity(this.data.isolated);
+      this.data.isolated.ex_col = ex_col;
+      this.data.isolated.ey_col = ey_col;
       this.bearingResults = calculateIsolatedBearing(this.data);
       this.structResults = calculateIsolatedStructural(this.data);
       this.rebarSchedule = calculateIsolatedRebarSchedule(this.data, this.structResults);
