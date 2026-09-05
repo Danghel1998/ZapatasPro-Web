@@ -295,6 +295,16 @@ export class FootingRenderer3D {
       for (let p = -half + sp / 2; p <= half - sp / 2 + 1e-6; p += sp) list.push(p);
       return list.length ? list : [0];
     };
+    // Igual que positionsIn, pero entre dos límites absolutos (no simétrico
+    // respecto de 0) — para el acero transversal, cuya franja de reparto no
+    // está centrada en el eje de la columna sino entre el borde de la
+    // zapata y el punto medio hacia la columna vecina.
+    const positionsBetween = (spacingCm, x0, x1) => {
+      const sp = Math.max(0.03, (spacingCm || 20) / 100);
+      const list = [];
+      for (let p = x0 + sp / 2; p <= x1 - sp / 2 + 1e-6; p += sp) list.push(p);
+      return list.length ? list : [(x0 + x1) / 2];
+    };
 
     positionsIn(str.bottom.spacing, zHalf).forEach((z) => {
       this._addBar(V(cover, yBottom, z), V(L - cover, yBottom, z), rMain, 'bottom_long');
@@ -303,13 +313,16 @@ export class FootingRenderer3D {
       this._addBar(V(cover, yTop, z), V(L - cover, yTop, z), rMain, 'top_long');
     });
 
-    const trib1Half = Math.max(0.3, s / 4);
-    const trib2Half = Math.max(0.3, s / 4);
-    positionsIn(str.trans1.spacing, trib1Half).forEach((dx) => {
-      this._addBar(V(a1 + dx, yBottom + 2 * rMain, -zHalf), V(a1 + dx, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col1');
+    // Franja de reparto de cada columna: desde el borde de la zapata más
+    // cercano hasta el punto medio entre los ejes de columna (igual
+    // criterio que calculateCombinedRebarSchedule), acotada siempre dentro
+    // de [cover, L-cover] para que ninguna barra sobresalga del sólido.
+    const xMid = (a1 + a2) / 2;
+    positionsBetween(str.trans1.spacing, cover, Math.min(xMid, L - cover)).forEach((x) => {
+      this._addBar(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col1');
     });
-    positionsIn(str.trans2.spacing, trib2Half).forEach((dx) => {
-      this._addBar(V(a2 + dx, yBottom + 2 * rMain, -zHalf), V(a2 + dx, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col2');
+    positionsBetween(str.trans2.spacing, Math.max(xMid, cover), L - cover).forEach((x) => {
+      this._addBar(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col2');
     });
 
     const yDowelTop = h + stemH - cover;
@@ -390,7 +403,8 @@ export class FootingRenderer3D {
     const { isolated } = fd;
     const { L, B, h } = isolated;
     const maxDim = Math.max(L, B);
-    this._labelSize = maxDim * 0.024;
+    const vertH = h + stemH;
+    this._labelSize = maxDim * 0.022;
     const V = (x, y, z) => new THREE.Vector3(x, y, z);
     const zFront = B / 2;
 
@@ -398,14 +412,17 @@ export class FootingRenderer3D {
     this._addDimension(V(-L / 2, 0, zFront), V(L / 2, 0, zFront), L.toFixed(2), V(0, 0, 1), 0.12 * maxDim);
     this._addDimension(V(L / 2, 0, -B / 2), V(L / 2, 0, B / 2), B.toFixed(2), V(1, 0, 0), 0.12 * maxDim);
 
+    // Etiquetas cortas, ancladas cerca de su propia franja de acero y
+    // apiladas justo encima del muñón de columna (no muy por encima del
+    // modelo, para que la línea directriz no cruce toda la escena).
     const labels = [
-      [V(0, h - 0.05, B * 0.3), [`Dir. larga: ${str.dbMain.name}`, `@ ${str.isLLong ? str.L_dir.spacing : str.B_dir.spacing} cm`]],
-      [V(L * 0.2, h - 0.05, 0), [`Banda central: ${str.dbMain.name}`, `@ ${str.banding.sp_band} cm`]],
+      [V(0, h - 0.03, B * 0.35), [`Dir. larga: ${str.dbMain.name} @ ${str.isLLong ? str.L_dir.spacing : str.B_dir.spacing} cm`]],
+      [V(L * 0.25, h - 0.03, 0), [`Banda central: ${str.dbMain.name} @ ${str.banding.sp_band} cm`]],
     ];
-    const labelX = L / 2 + 0.35 * maxDim;
-    const top = h + stemH + 0.3 * maxDim;
+    const labelX = L / 2 + 0.12 * maxDim;
+    const top = vertH + 0.35 * vertH;
     labels.forEach(([anchor, text], i) => {
-      this._addLeaderLabel(anchor, V(labelX, top - i * 0.18 * maxDim, B * 0.4), text);
+      this._addLeaderLabel(anchor, V(labelX, top - i * 0.3 * vertH, B * 0.3), text);
     });
   }
 
@@ -414,7 +431,8 @@ export class FootingRenderer3D {
     const { L, B, h } = combined;
     const cover = fd.materials.cover_footing;
     const maxDim = Math.max(L, B);
-    this._labelSize = maxDim * 0.02;
+    const vertH = h + stemH;
+    this._labelSize = maxDim * 0.018;
     const V = (x, y, z) => new THREE.Vector3(x, y, z);
     const zFront = B / 2;
 
@@ -422,14 +440,18 @@ export class FootingRenderer3D {
     this._addDimension(V(0, 0, zFront), V(L, 0, zFront), L.toFixed(2), V(0, 0, 1), 0.10 * maxDim);
     this._addDimension(V(L + 0.02 * maxDim, 0, -B / 2), V(L + 0.02 * maxDim, 0, B / 2), B.toFixed(2), V(1, 0, 0), 0.08 * maxDim);
 
+    // Etiquetas ancladas cerca de su propia capa de acero, apiladas justo
+    // encima de los muñones de columna (escala vertical según la altura
+    // real del modelo, no según el largo L — de lo contrario la línea
+    // directriz termina muy por encima y cruza toda la escena en diagonal).
     const labels = [
-      [V(L * 0.5, cover, B * 0.3), [`Inferior: ${str.dbMain.name} @ ${str.bottom.spacing} cm`]],
-      [V(L * 0.5, h - 0.05, -B * 0.3), [`Superior: ${str.dbMain.name} @ ${str.top.spacing} cm`]],
+      [V(L * 0.5, cover, B * 0.35), [`Inferior: ${str.dbMain.name} @ ${str.bottom.spacing} cm`]],
+      [V(L * 0.5, h - 0.03, -B * 0.35), [`Superior: ${str.dbMain.name} @ ${str.top.spacing} cm`]],
     ];
-    const labelX = L + 0.30 * maxDim;
-    const top = h + stemH + 0.3 * maxDim;
+    const labelX = L * 0.5 + 0.10 * maxDim;
+    const top = vertH + 0.35 * vertH;
     labels.forEach(([anchor, text], i) => {
-      this._addLeaderLabel(anchor, V(labelX, top - i * 0.18 * maxDim, 0), text);
+      this._addLeaderLabel(anchor, V(labelX, top - i * 0.3 * vertH, B * 0.5), text);
     });
   }
 
