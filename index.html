@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZapatasPro - Diseño de Zapatas Aisladas y Combinadas (E.060 / E.050)</title>
+
+  <script>
+    (function () {
+      const saved = localStorage.getItem('zapataspro_theme');
+      const isDark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (isDark) document.documentElement.classList.add('dark');
+    })();
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="min-h-screen flex flex-col bg-slate-100 text-slate-900 antialiased">
+
+  <header class="bg-white border-b border-slate-300 px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50 shadow-sm">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-lg overflow-hidden shadow-md bg-indigo-600 flex items-center justify-center text-white font-black text-lg">Z</div>
+      <div>
+        <h1 class="text-sm font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+          ZapatasPro <span class="text-[11px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">E.060 / E.050</span>
+        </h1>
+        <p class="text-[10px] text-slate-500 font-medium">Software de Diseño de Zapatas Aisladas y Combinadas</p>
+        <p class="text-[10px] text-slate-400 italic">Creado por el Ing. Dan Oliden</p>
+      </div>
+    </div>
+
+    <div class="flex items-center flex-wrap gap-2">
+      <select id="preset_dropdown" class="text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 font-bold py-1.5 px-3 rounded text-slate-700 transition cursor-pointer" onchange="if(this.value) { document.querySelector(`[data-preset='${this.value}']`).click(); }">
+        <option value="zapata_aislada_tipica" selected>⭐ Zapata Aislada Típica</option>
+        <option value="zapata_aislada_excentrica">Zapata Aislada con Momento</option>
+        <option value="zapata_combinada_tipica">Zapata Combinada (2 columnas)</option>
+      </select>
+      <div class="hidden">
+        <button data-preset="zapata_aislada_tipica"></button>
+        <button data-preset="zapata_aislada_excentrica"></button>
+        <button data-preset="zapata_combinada_tipica"></button>
+      </div>
+
+      <button id="btn_toggle_theme" class="text-xs flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold py-1.5 px-3 rounded transition" title="Cambiar entre tema claro y oscuro">
+        <i data-lucide="moon" id="icon_theme_moon" class="w-3.5 h-3.5 text-slate-500"></i>
+        <i data-lucide="sun" id="icon_theme_sun" class="w-3.5 h-3.5 text-slate-500 hidden"></i>
+      </button>
+
+      <button id="btn_export_png" class="text-xs flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold py-1.5 px-3 rounded transition">
+        <i data-lucide="image" class="w-3.5 h-3.5 text-slate-500"></i> PNG
+      </button>
+      <button id="btn_export_json" class="text-xs flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold py-1.5 px-3 rounded transition">
+        <i data-lucide="download" class="w-3.5 h-3.5 text-slate-500"></i> Guardar
+      </button>
+      <button id="btn_print_report" class="text-xs flex items-center gap-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold py-1.5 px-3.5 rounded shadow-sm transition">
+        <i data-lucide="printer" class="w-3.5 h-3.5"></i> Imprimir Memoria
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+
+    <aside class="w-full lg:w-[500px] xl:w-[530px] bg-slate-50/70 border-r border-slate-300 flex flex-col h-auto lg:h-[calc(100vh-57px)] overflow-y-auto">
+
+      <div class="p-2.5 border-b border-slate-300 bg-white sticky top-0 z-20 shadow-xs space-y-2">
+        <div class="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-lg text-xs font-bold border border-slate-200">
+          <button data-footing-type="aislada" class="py-1.5 px-1 rounded-md bg-indigo-600 text-white shadow transition">🧱 Zapata Aislada</button>
+          <button data-footing-type="combinada" class="py-1.5 px-1 rounded-md bg-slate-100 text-slate-700 transition">🔗 Zapata Combinada</button>
+        </div>
+        <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg text-xs font-bold border border-slate-200">
+          <button data-input-tab="tab_datos" class="py-1.5 px-1 rounded-md bg-white text-indigo-700 shadow-sm transition flex items-center justify-center gap-1 text-[11px]">
+            <i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i> Datos
+          </button>
+          <button data-input-tab="tab_armaduras" class="py-1.5 px-1 rounded-md text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1 text-[11px]">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Armaduras
+          </button>
+          <button data-input-tab="tab_avanzado" class="py-1.5 px-1 rounded-md text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1 text-[11px]">
+            <i data-lucide="sliders" class="w-3.5 h-3.5"></i> Avanzado
+          </button>
+        </div>
+      </div>
+
+      <div class="p-3.5 space-y-3.5">
+
+        <!-- ============================= PESTAÑA: DATOS ============================= -->
+        <div id="tab_datos" class="input-group-panel space-y-3.5">
+
+          <!-- Geometría y cargas — ZAPATA AISLADA -->
+          <div class="only-aislada eng-card">
+            <div class="eng-card-header">
+              <span class="eng-card-title"><span class="w-2 h-2 rounded-full bg-indigo-600"></span> Geometría — Zapata Aislada</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Largo</span><span class="eng-symbol">(L)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.6" max="8" class="eng-cell-input" data-bind="isolated.L"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Ancho</span><span class="eng-symbol">(B)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.6" max="8" class="eng-cell-input" data-bind="isolated.B"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Peralte total</span><span class="eng-symbol">(h)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.25" max="2" class="eng-cell-input" data-bind="isolated.h"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Columna, dim. X</span><span class="eng-symbol">(col_L)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.15" max="1.5" class="eng-cell-input" data-bind="isolated.col_L"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Columna, dim. Y</span><span class="eng-symbol">(col_B)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.15" max="1.5" class="eng-cell-input" data-bind="isolated.col_B"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Prof. de desplante</span><span class="eng-symbol">(Df)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.1" min="0.4" max="5" class="eng-cell-input" data-bind="isolated.Df"><span class="eng-unit-badge">m</span></div></div>
+            </div>
+          </div>
+
+          <div class="only-aislada eng-card">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-amber-950"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Cargas de Servicio en la Columna</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Carga muerta</span><span class="eng-symbol">(Pd)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="1" min="0" class="eng-cell-input" data-bind="isolated.Pd"><span class="eng-unit-badge">tn</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Carga viva</span><span class="eng-symbol">(Pl)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="1" min="0" class="eng-cell-input" data-bind="isolated.Pl"><span class="eng-unit-badge">tn</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento Mx — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="isolated.Mx_d"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="isolated.Mx_l"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento My — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="isolated.My_d"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="isolated.My_l"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+            </div>
+          </div>
+
+          <!-- Geometría y cargas — ZAPATA COMBINADA -->
+          <div class="only-combinada eng-card hidden">
+            <div class="eng-card-header">
+              <span class="eng-card-title"><span class="w-2 h-2 rounded-full bg-indigo-600"></span> Geometría — Zapata Combinada</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Largo total</span><span class="eng-symbol">(L)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.1" min="2" max="15" class="eng-cell-input" data-bind="combined.L"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Ancho</span><span class="eng-symbol">(B)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.8" max="5" class="eng-cell-input" data-bind="combined.B"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Peralte total</span><span class="eng-symbol">(h)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.3" max="2" class="eng-cell-input" data-bind="combined.h"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Borde izq. a eje Columna 1</span><span class="eng-symbol">(a1)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="0.1" max="5" class="eng-cell-input" data-bind="combined.a1"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Separación entre ejes</span><span class="eng-symbol">(s)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.1" min="1" max="12" class="eng-cell-input" data-bind="combined.s"><span class="eng-unit-badge">m</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Prof. de desplante</span><span class="eng-symbol">(Df)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.1" min="0.4" max="5" class="eng-cell-input" data-bind="combined.Df"><span class="eng-unit-badge">m</span></div></div>
+              <div class="grid grid-cols-2 gap-2 pt-1">
+                <div><label class="text-[11px] font-semibold text-slate-600">Columna 1 (L×B, m)</label>
+                  <div class="flex gap-1"><input type="number" step="0.05" class="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col1_L">
+                  <input type="number" step="0.05" class="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col1_B"></div></div>
+                <div><label class="text-[11px] font-semibold text-slate-600">Columna 2 (L×B, m)</label>
+                  <div class="flex gap-1"><input type="number" step="0.05" class="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col2_L">
+                  <input type="number" step="0.05" class="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col2_B"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="only-combinada eng-card hidden">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-amber-950"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Cargas de Servicio</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Columna 1 — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P1d"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P1l"><span class="eng-unit-badge">tn</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Columna 2 — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P2d"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P2l"><span class="eng-unit-badge">tn</span></div>
+                </div></div>
+            </div>
+          </div>
+
+          <!-- Suelo (compartido) -->
+          <div class="eng-card">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-orange-950"><span class="w-2 h-2 rounded-full bg-orange-500"></span> Suelo de Fundación</span>
+              <span class="text-[10px] text-orange-700 font-semibold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200">Estudio de Suelos</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Peso específico</span><span class="eng-symbol">(γs)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="10" min="1200" max="2200" class="eng-cell-input" data-bind="foundation.gamma_kgm3"><span class="eng-unit-badge">kg/m³</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Ángulo de fricción (ref.)</span><span class="eng-symbol">(φ)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.5" min="15" max="45" class="eng-cell-input" data-bind="foundation.phi"><span class="eng-unit-badge">°</span></div></div>
+              <div class="eng-input-group"><label class="eng-label font-bold text-slate-900"><span>Capacidad portante admisible</span><span class="eng-symbol text-amber-700">(q_adm)</span></label>
+                <div class="eng-cell-wrapper eng-cell-yellow-wrapper"><input type="number" step="0.1" min="0.3" max="10" class="eng-cell-input font-bold" data-bind="foundation.q_adm_kgcm2"><span class="eng-unit-badge">kg/cm²</span></div></div>
+            </div>
+          </div>
+
+          <!-- Materiales (compartido) -->
+          <div class="eng-card">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-emerald-950"><span class="w-2 h-2 rounded-full bg-emerald-600"></span> Materiales</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Resistencia del concreto</span><span class="eng-symbol">(f'c)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="10" min="140" max="420" class="eng-cell-input font-bold" data-bind="materials.fc_kgcm2"><span class="eng-unit-badge">kg/cm²</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Resistencia del acero</span><span class="eng-symbol">(fy)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="100" min="2800" max="5000" class="eng-cell-input font-bold" data-bind="materials.fy_kgcm2"><span class="eng-unit-badge">kg/cm²</span></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Peso específico del concreto</span><span class="eng-symbol">(γc)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="50" min="2000" max="2600" class="eng-cell-input" data-bind="materials.gamma_c_kgm3"><span class="eng-unit-badge">kg/m³</span></div></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ============================= PESTAÑA: ARMADURAS ============================= -->
+        <div id="tab_armaduras" class="input-group-panel hidden space-y-4">
+          <div class="eng-card">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-emerald-950"><i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i> Diámetros Comerciales</span>
+            </div>
+            <div class="space-y-3">
+              <div class="space-y-1">
+                <label class="text-xs font-semibold text-slate-700">Barra principal (flexión)</label>
+                <select id="rebar_main_id" data-bind="materials.rebar_main_id" class="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded"></select>
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-semibold text-slate-700">Barra transversal / temperatura</label>
+                <select id="rebar_trans_id" data-bind="materials.rebar_trans_id" class="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded"></select>
+              </div>
+            </div>
+            <div class="pt-3 border-t border-slate-200 mt-3 space-y-1">
+              <label class="text-[11px] font-semibold text-slate-600">Recubrimiento libre (contacto con terreno)</label>
+              <div class="eng-cell-wrapper"><input type="number" step="0.005" min="0.04" max="0.10" class="eng-cell-input" data-bind="materials.cover_footing"><span class="eng-unit-badge">m</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================= PESTAÑA: AVANZADO ============================= -->
+        <div id="tab_avanzado" class="input-group-panel hidden space-y-4">
+          <div class="eng-card">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-slate-900"><i data-lucide="settings" class="w-4 h-4 text-slate-600"></i> Factores de Carga (E.060)</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="text-xs font-semibold text-slate-700">Factor carga muerta</label>
+                <input type="number" step="0.05" class="eng-cell-input border border-slate-300 rounded w-full text-right" data-bind="safety_req.LF_D"></div>
+              <div><label class="text-xs font-semibold text-slate-700">Factor carga viva</label>
+                <input type="number" step="0.05" class="eng-cell-input border border-slate-300 rounded w-full text-right" data-bind="safety_req.LF_L"></div>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-2">Por defecto U = 1.2D + 1.6L (E.060 / ACI 318 vigente).</p>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <section class="flex-1 flex flex-col h-auto lg:h-[calc(100vh-57px)] overflow-y-auto bg-slate-100 p-4 lg:p-5 space-y-3.5">
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <div id="kpi_bearing"></div>
+        <div id="kpi_eccentricity"></div>
+        <div id="kpi_shear"></div>
+        <div id="kpi_punching"></div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col flex-1">
+
+        <div class="tab-nav-header px-4 py-2 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex space-x-2">
+            <button data-main-tab="visualizer_panel" class="py-1.5 px-3 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 transition flex items-center gap-1.5">
+              <i data-lucide="line-chart" class="w-3.5 h-3.5"></i> Visualizador
+            </button>
+            <button data-main-tab="forces_panel" class="py-1.5 px-3 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition flex items-center gap-1.5">
+              <i data-lucide="scale" class="w-3.5 h-3.5"></i> Resumen Estructural
+            </button>
+            <button data-main-tab="report_panel" class="py-1.5 px-3 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition flex items-center gap-1.5">
+              <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Memoria de Cálculo
+            </button>
+          </div>
+
+          <div class="flex items-center space-x-1 bg-slate-200/80 p-0.5 rounded-lg text-xs font-bold">
+            <button data-view-mode="plan" class="px-2.5 py-1 rounded bg-indigo-600 text-white shadow transition">📐 Planta</button>
+            <button data-view-mode="section" class="px-2.5 py-1 rounded bg-slate-100 text-slate-700 hover:bg-white transition">📏 Sección</button>
+            <button data-view-mode="pressures" class="px-2.5 py-1 rounded bg-slate-100 text-slate-700 hover:bg-white transition">📉 Presiones</button>
+            <button data-view-mode="diagram" class="px-2.5 py-1 rounded bg-slate-100 text-slate-700 hover:bg-white transition hidden">📈 Diagramas V y M</button>
+            <button data-view-mode="rebar" class="px-2.5 py-1 rounded bg-slate-100 text-slate-700 hover:bg-white transition">🏗️ Armadura</button>
+            <button id="btn_reset_view" class="p-1 rounded bg-slate-100 text-slate-700 hover:bg-white transition" title="Centrar y reajustar vista">
+              <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="visualizer_panel" class="tab-content-panel p-2 flex-1 flex flex-col min-h-[420px]">
+          <div id="canvas2d_container" class="canvas-container w-full h-[520px] lg:h-full rounded-lg border border-slate-200">
+            <canvas id="footingCanvas" class="w-full h-full block"></canvas>
+          </div>
+        </div>
+
+        <div id="forces_panel" class="tab-content-panel hidden p-6 space-y-6 overflow-y-auto flex-1 pb-16">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+              <i data-lucide="cpu" class="w-4 h-4 text-emerald-600"></i> Resumen de Diseño Estructural y Armado (Norma E.060)
+            </h3>
+            <div class="overflow-x-auto rounded-lg border border-slate-200">
+              <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th class="py-2.5 px-3">Elemento</th>
+                    <th class="py-2.5 px-3 text-right">Mu</th>
+                    <th class="py-2.5 px-3 text-right">Vu / φVc</th>
+                    <th class="py-2.5 px-3 text-right">As Requerido</th>
+                    <th class="py-2.5 px-3">Armadura Colocada</th>
+                    <th class="py-2.5 px-3 text-center">Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="table_structural_tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="report_panel" class="tab-content-panel hidden p-8 bg-white overflow-y-auto flex-1 pb-20">
+          <table id="print_report_wrapper">
+            <thead><tr><td><div id="print_running_header">MEMORIA DE CÁLCULO<br>ZAPATAS</div></td></tr></thead>
+            <tbody><tr><td id="calculation_report_content"></td></tr></tbody>
+          </table>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { AppUIController } from './js/ui/uiController.js';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      window.app = new AppUIController();
+
+      const themeBtn = document.getElementById('btn_toggle_theme');
+      const moonIcon = document.getElementById('icon_theme_moon');
+      const sunIcon = document.getElementById('icon_theme_sun');
+      const syncThemeIcon = () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        moonIcon.classList.toggle('hidden', isDark);
+        sunIcon.classList.toggle('hidden', !isDark);
+      };
+      syncThemeIcon();
+      themeBtn.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('zapataspro_theme', isDark ? 'dark' : 'light');
+        syncThemeIcon();
+      });
+    });
+  </script>
+</body>
+</html>

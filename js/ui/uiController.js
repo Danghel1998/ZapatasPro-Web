@@ -1,0 +1,593 @@
+/**
+ * Controlador de interfaz de usuario, eventos, reactividad y sincronización
+ * de ZapatasPro (zapata aislada y zapata combinada), estilo MurosPro.
+ */
+
+import { DEFAULT_FOOTING_DATA, PRESET_PROJECTS, REBAR_TABLE } from '../constants.js';
+import { calculateIsolatedBearing, calculateCombinedBearing } from '../engine/soilBearing.js';
+import { calculateIsolatedStructural } from '../engine/isolatedFooting.js';
+import { calculateCombinedStructural } from '../engine/combinedFooting.js';
+import { calculateIsolatedRebarSchedule, calculateCombinedRebarSchedule } from '../engine/rebarSchedule.js';
+import { knToKg, kNmToKgm } from '../engine/units.js';
+import { FootingCanvasRenderer } from '../visualizer/footingCanvas.js';
+
+const ISOLATED_VIEW_MODES = ['plan', 'section', 'pressures', 'rebar'];
+const COMBINED_VIEW_MODES = ['plan', 'section', 'diagram', 'rebar'];
+
+export class AppUIController {
+  constructor() {
+    this.data = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
+    this.bearingResults = null;
+    this.structResults = null;
+    this.rebarSchedule = null;
+
+    const canvasEl = document.getElementById('footingCanvas');
+    this.renderer = new FootingCanvasRenderer(canvasEl);
+
+    this.initUI();
+    this.recalculateAndRender();
+  }
+
+  initUI() {
+    this.populateRebarSelects();
+    this.bindInputEvents();
+    this.bindButtonEvents();
+    this.syncFormWithData();
+    this.updateFootingTypeVisibility();
+    this.renderer.resizeCanvas();
+  }
+
+  populateRebarSelects() {
+    ['rebar_main_id', 'rebar_trans_id'].forEach((selId) => {
+      const el = document.getElementById(selId);
+      if (!el) return;
+      el.innerHTML = '';
+      REBAR_TABLE.forEach((bar, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = `${bar.name} (Ab = ${bar.area_cm2} cm²)`;
+        el.appendChild(opt);
+      });
+    });
+  }
+
+  bindInputEvents() {
+    const inputs = document.querySelectorAll('input[data-bind], select[data-bind]');
+    inputs.forEach((input) => {
+      input.addEventListener('input', (e) => this.handleInputChange(e.target, false));
+      input.addEventListener('change', (e) => this.handleInputChange(e.target, true));
+    });
+  }
+
+  handleInputChange(element, isCommit) {
+    const bindPath = element.getAttribute('data-bind');
+    if (!bindPath) return;
+    const parts = bindPath.split('.');
+    let target = this.data;
+    for (let i = 0; i < parts.length - 1; i++) target = target[parts[i]];
+    const lastKey = parts[parts.length - 1];
+
+    let val;
+    if (element.type === 'checkbox') {
+      val = element.checked;
+    } else if (element.type === 'number' || element.type === 'range') {
+      if (element.type === 'number' && !isCommit && !/^-?\d*\.?\d*$/.test(element.value)) return;
+      val = parseFloat(element.value);
+      if (!isCommit && Number.isNaN(val)) return;
+    } else {
+      val = element.value;
+    }
+    target[lastKey] = val;
+
+    if (bindPath === 'footing_type') this.updateFootingTypeVisibility();
+
+    const syncName = element.getAttribute('data-sync');
+    if (syncName) {
+      document.querySelectorAll(`[data-sync="${syncName}"]`).forEach((inp) => {
+        if (inp !== element) {
+          if (inp.type === 'checkbox') inp.checked = element.checked; else inp.value = element.value;
+        }
+      });
+    }
+
+    this.recalculateAndRender();
+  }
+
+  updateFootingTypeVisibility() {
+    const isIsolated = this.data.footing_type === 'aislada';
+    document.querySelectorAll('.only-aislada').forEach((el) => el.classList.toggle('hidden', !isIsolated));
+    document.querySelectorAll('.only-combinada').forEach((el) => el.classList.toggle('hidden', isIsolated));
+
+    const modes = isIsolated ? ISOLATED_VIEW_MODES : COMBINED_VIEW_MODES;
+    document.querySelectorAll('[data-view-mode]').forEach((btn) => {
+      const mode = btn.getAttribute('data-view-mode');
+      btn.classList.toggle('hidden', !modes.includes(mode));
+    });
+    if (!modes.includes(this.renderer.viewMode)) {
+      this.renderer.setViewMode(modes[0]);
+      document.querySelectorAll('[data-view-mode]').forEach((b) => {
+        const active = b.getAttribute('data-view-mode') === modes[0];
+        b.classList.toggle('bg-indigo-600', active);
+        b.classList.toggle('text-white', active);
+        b.classList.toggle('shadow', active);
+        b.classList.toggle('bg-slate-100', !active);
+        b.classList.toggle('text-slate-700', !active);
+      });
+    }
+  }
+
+  bindButtonEvents() {
+    // Pestañas del panel izquierdo
+    const inputTabs = document.querySelectorAll('[data-input-tab]');
+    inputTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        inputTabs.forEach((t) => { t.classList.remove('bg-white', 'text-indigo-700', 'shadow-sm'); t.classList.add('text-slate-600'); });
+        tab.classList.add('bg-white', 'text-indigo-700', 'shadow-sm');
+        tab.classList.remove('text-slate-600');
+        document.querySelectorAll('.input-group-panel').forEach((p) => p.classList.add('hidden'));
+        const group = document.getElementById(tab.getAttribute('data-input-tab'));
+        if (group) group.classList.remove('hidden');
+      });
+    });
+
+    // Tipo de zapata (aislada / combinada)
+    document.querySelectorAll('[data-footing-type]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.data.footing_type = btn.getAttribute('data-footing-type');
+        document.querySelectorAll('[data-footing-type]').forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle('bg-indigo-600', active);
+          b.classList.toggle('text-white', active);
+          b.classList.toggle('bg-slate-100', !active);
+          b.classList.toggle('text-slate-700', !active);
+        });
+        this.updateFootingTypeVisibility();
+        this.recalculateAndRender();
+      });
+    });
+
+    // Modos de vista del visualizador
+    document.querySelectorAll('[data-view-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-view-mode]').forEach((b) => {
+          b.classList.remove('bg-indigo-600', 'text-white', 'shadow');
+          b.classList.add('bg-slate-100', 'text-slate-700');
+        });
+        btn.classList.add('bg-indigo-600', 'text-white', 'shadow');
+        btn.classList.remove('bg-slate-100', 'text-slate-700');
+        this.renderer.setViewMode(btn.getAttribute('data-view-mode'));
+      });
+    });
+
+    // Pestañas principales (Visualizador / Fuerzas / Memoria)
+    const mainTabs = document.querySelectorAll('[data-main-tab]');
+    mainTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        mainTabs.forEach((t) => { t.classList.remove('border-indigo-600', 'text-indigo-600'); t.classList.add('border-transparent', 'text-slate-500'); });
+        tab.classList.add('border-indigo-600', 'text-indigo-600');
+        tab.classList.remove('border-transparent', 'text-slate-500');
+        const tabId = tab.getAttribute('data-main-tab');
+        document.querySelectorAll('.tab-content-panel').forEach((p) => p.classList.add('hidden'));
+        const panel = document.getElementById(tabId);
+        if (panel) {
+          panel.classList.remove('hidden');
+          if (tabId === 'visualizer_panel') { this.renderer.resizeCanvas(); this.renderer.render(); }
+        }
+      });
+    });
+
+    // Presets
+    document.querySelectorAll('[data-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-preset');
+        if (PRESET_PROJECTS[key]) {
+          this.data = JSON.parse(JSON.stringify(PRESET_PROJECTS[key].data));
+          this.syncFormWithData();
+          const activeBtn = document.querySelector(`[data-footing-type="${this.data.footing_type}"]`);
+          if (activeBtn) activeBtn.click();
+          this.updateFootingTypeVisibility();
+          this.recalculateAndRender();
+        }
+      });
+    });
+
+    const resetBtn = document.getElementById('btn_reset_view');
+    if (resetBtn) resetBtn.addEventListener('click', () => this.renderer.resetView());
+
+    const printBtn = document.getElementById('btn_print_report');
+    if (printBtn) {
+      printBtn.addEventListener('click', () => {
+        const memoriaTab = document.querySelector('[data-main-tab="report_panel"]');
+        if (memoriaTab) memoriaTab.click();
+        setTimeout(() => window.print(), 50);
+      });
+    }
+
+    const exportJsonBtn = document.getElementById('btn_export_json');
+    if (exportJsonBtn) {
+      exportJsonBtn.addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(this.data, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.download = `Proyecto_Zapata_${this.data.footing_type}.json`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+      });
+    }
+
+    const exportImgBtn = document.getElementById('btn_export_png');
+    if (exportImgBtn) {
+      exportImgBtn.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = `Zapata_${this.data.footing_type}.png`;
+        link.href = this.renderer.canvas.toDataURL('image/png');
+        link.click();
+      });
+    }
+  }
+
+  syncFormWithData() {
+    const inputs = document.querySelectorAll('input[data-bind], select[data-bind]');
+    inputs.forEach((input) => {
+      const bindPath = input.getAttribute('data-bind');
+      if (!bindPath) return;
+      const parts = bindPath.split('.');
+      let target = this.data;
+      for (let i = 0; i < parts.length - 1; i++) { if (!target) return; target = target[parts[i]]; }
+      if (!target) return;
+      const val = target[parts[parts.length - 1]];
+      if (input.type === 'checkbox') input.checked = !!val; else input.value = val !== undefined ? val : '';
+    });
+  }
+
+  recalculateAndRender() {
+    const isIsolated = this.data.footing_type === 'aislada';
+    if (isIsolated) {
+      this.bearingResults = calculateIsolatedBearing(this.data);
+      this.structResults = calculateIsolatedStructural(this.data);
+      this.rebarSchedule = calculateIsolatedRebarSchedule(this.data, this.structResults);
+    } else {
+      this.bearingResults = calculateCombinedBearing(this.data);
+      this.structResults = calculateCombinedStructural(this.data);
+      this.rebarSchedule = calculateCombinedRebarSchedule(this.data, this.structResults);
+    }
+    this.renderer.updateData(this.data, this.bearingResults, this.structResults);
+
+    this.updateStatusBadges();
+    this.updateStructuralSummary();
+    this.generateCalculationReport();
+  }
+
+  renderKPIBadge(elementId, data) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const bgClass = data.pass ? 'border-emerald-300 bg-emerald-50/70' : 'border-amber-300 bg-amber-50/70';
+    const textClass = data.pass ? 'text-emerald-700' : 'text-amber-700';
+    const barClass = data.pass ? 'bg-emerald-500' : 'bg-amber-500';
+    const statusText = data.pass ? 'OK CUMPLE' : 'NO CUMPLE';
+    const badgeBg = data.pass ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900';
+    el.className = `p-2.5 rounded border ${bgClass} transition-all duration-150`;
+    el.innerHTML = `
+      <div class="flex justify-between items-start mb-0.5">
+        <span class="text-[11px] font-bold text-slate-600">${data.title}</span>
+        <span class="text-[9px] font-extrabold px-1 py-0.5 rounded ${badgeBg}">${statusText}</span>
+      </div>
+      <div class="flex items-baseline space-x-1.5">
+        <span class="text-lg font-extrabold font-mono ${textClass}">${data.val}</span>
+        <span class="text-[10px] text-slate-500 font-medium">${data.req}</span>
+      </div>
+      <div class="w-full bg-slate-200 h-1 rounded mt-1.5 overflow-hidden">
+        <div class="${barClass} h-full rounded transition-all duration-200" style="width: ${Math.min(100, Math.max(2, data.progress))}%"></div>
+      </div>`;
+  }
+
+  updateStatusBadges() {
+    const geo = this.bearingResults, str = this.structResults;
+    if (!geo || !str) return;
+    const isIsolated = this.data.footing_type === 'aislada';
+
+    this.renderKPIBadge('kpi_bearing', {
+      title: 'Presión de Contacto (q_max)',
+      val: `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`,
+      req: `≤ ${geo.q_adm_kgcm2.toFixed(2)}`,
+      pass: geo.pass_bearing,
+      progress: (geo.q_max_kgcm2 / geo.q_adm_kgcm2) * 100,
+    });
+
+    if (isIsolated) {
+      this.renderKPIBadge('kpi_eccentricity', {
+        title: 'Excentricidad (tercio medio)',
+        val: `ex=${(geo.ex * 100).toFixed(1)} / ey=${(geo.ey * 100).toFixed(1)} cm`,
+        req: `≤ ${(geo.ex_max * 100).toFixed(1)} / ${(geo.ey_max * 100).toFixed(1)}`,
+        pass: geo.pass_kern,
+        progress: Math.max(Math.abs(geo.ex) / geo.ex_max, Math.abs(geo.ey) / geo.ey_max) * 100,
+      });
+      this.renderKPIBadge('kpi_punching', {
+        title: 'Punzonamiento (Vu / φVc)',
+        val: `${knToKg(str.punching.Vu).toFixed(0)} kg`,
+        req: `≤ ${knToKg(str.punching.phiVc).toFixed(0)} kg`,
+        pass: str.punching.pass,
+        progress: (str.punching.Vu / str.punching.phiVc) * 100,
+      });
+      this.renderKPIBadge('kpi_shear', {
+        title: 'Corte 1 dirección (peor caso)',
+        val: `${(Math.max(str.L_dir.shear.V / str.L_dir.phiVc, str.B_dir.shear.V / str.B_dir.phiVc) * 100).toFixed(0)} %`,
+        req: '≤ 100 %',
+        pass: str.L_dir.pass_shear && str.B_dir.pass_shear,
+        progress: Math.max(str.L_dir.shear.V / str.L_dir.phiVc, str.B_dir.shear.V / str.B_dir.phiVc) * 100,
+      });
+    } else {
+      this.renderKPIBadge('kpi_eccentricity', {
+        title: 'Excentricidad Longitudinal (tercio medio)',
+        val: `e = ${(geo.e * 100).toFixed(1)} cm`,
+        req: `≤ ${(geo.e_max * 100).toFixed(1)} cm`,
+        pass: geo.within_kern,
+        progress: (Math.abs(geo.e) / geo.e_max) * 100,
+      });
+      this.renderKPIBadge('kpi_punching', {
+        title: 'Punzonamiento (peor columna)',
+        val: `${(Math.max(str.punch1.Vu / str.punch1.phiVc, str.punch2.Vu / str.punch2.phiVc) * 100).toFixed(0)} %`,
+        req: '≤ 100 %',
+        pass: str.punch1.pass && str.punch2.pass,
+        progress: Math.max(str.punch1.Vu / str.punch1.phiVc, str.punch2.Vu / str.punch2.phiVc) * 100,
+      });
+      this.renderKPIBadge('kpi_shear', {
+        title: 'Corte 1 dirección (peor sección)',
+        val: `${(Math.max(...str.shearChecks.map(c => c.Vu / str.phiVc_oneWay)) * 100).toFixed(0)} %`,
+        req: '≤ 100 %',
+        pass: str.pass_shear_oneWay,
+        progress: Math.max(...str.shearChecks.map(c => c.Vu / str.phiVc_oneWay)) * 100,
+      });
+    }
+  }
+
+  updateStructuralSummary() {
+    const tbody = document.getElementById('table_structural_tbody');
+    if (!tbody) return;
+    const str = this.structResults;
+    const isIsolated = this.data.footing_type === 'aislada';
+    const badge = (pass) => `<span class="px-2 py-0.5 rounded text-[10px] font-bold ${pass ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${pass ? 'OK' : 'Revisar'}</span>`;
+
+    if (isIsolated) {
+      tbody.innerHTML = `
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Franja dirección L</td>
+          <td class="py-2 px-3 text-right">${kNmToKgm(str.L_dir.strip.M).toFixed(0)} kg·m</td>
+          <td class="py-2 px-3 text-right">${(str.L_dir.shear.V / str.L_dir.phiVc * 100).toFixed(0)} %</td>
+          <td class="py-2 px-3 text-right font-bold text-indigo-600">${str.L_dir.As_per_m.toFixed(2)} cm²/m</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">${str.dbMain.name} @ ${str.L_dir.spacing ?? str.banding.sp_band} cm</td>
+          <td class="py-2 px-3 text-center">${badge(str.L_dir.pass_shear)}</td>
+        </tr>
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Franja dirección B</td>
+          <td class="py-2 px-3 text-right">${kNmToKgm(str.B_dir.strip.M).toFixed(0)} kg·m</td>
+          <td class="py-2 px-3 text-right">${(str.B_dir.shear.V / str.B_dir.phiVc * 100).toFixed(0)} %</td>
+          <td class="py-2 px-3 text-right font-bold text-indigo-600">${str.B_dir.As_per_m.toFixed(2)} cm²/m</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">${str.dbMain.name} @ ${str.B_dir.spacing ?? str.banding.sp_band} cm</td>
+          <td class="py-2 px-3 text-center">${badge(str.B_dir.pass_shear)}</td>
+        </tr>
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Punzonamiento (2 direcciones)</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 text-right">${knToKg(str.punching.Vu).toFixed(0)} / ${knToKg(str.punching.phiVc).toFixed(0)} kg</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">bo = ${(str.punching.bo * 100).toFixed(0)} cm</td>
+          <td class="py-2 px-3 text-center">${badge(str.punching.pass)}</td>
+        </tr>`;
+    } else {
+      tbody.innerHTML = `
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Longitudinal inferior (voladizos, +)</td>
+          <td class="py-2 px-3 text-right">${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 text-right font-bold text-indigo-600">${str.bottom.As_per_m.toFixed(2)} cm²/m</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">${str.dbMain.name} @ ${str.bottom.spacing} cm</td>
+          <td class="py-2 px-3 text-center">${badge(true)}</td>
+        </tr>
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Longitudinal superior (entre columnas, −)</td>
+          <td class="py-2 px-3 text-right">${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 text-right font-bold text-indigo-600">${str.top.As_per_m.toFixed(2)} cm²/m</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">${str.dbMain.name} @ ${str.top.spacing} cm</td>
+          <td class="py-2 px-3 text-center">${badge(true)}</td>
+        </tr>
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Corte en una dirección (4 secciones a "d")</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 text-right">${(Math.max(...str.shearChecks.map(c => c.Vu)) / 1).toFixed(0)} / ${str.phiVc_oneWay.toFixed(0)} kN</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">d = ${(str.d_main * 100).toFixed(1)} cm</td>
+          <td class="py-2 px-3 text-center">${badge(str.pass_shear_oneWay)}</td>
+        </tr>
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Punzonamiento Columna 1 / Columna 2</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 text-right">${knToKg(str.punch1.Vu).toFixed(0)}/${knToKg(str.punch2.Vu).toFixed(0)} kg</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">φVc = ${knToKg(str.punch1.phiVc).toFixed(0)}/${knToKg(str.punch2.phiVc).toFixed(0)} kg</td>
+          <td class="py-2 px-3 text-center">${badge(str.punch1.pass && str.punch2.pass)}</td>
+        </tr>
+        <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-2 px-3 font-bold text-slate-800">Transversal bajo Columna 1 / Columna 2</td>
+          <td class="py-2 px-3 text-right">${kNmToKgm(str.trans1.Mu).toFixed(0)}/${kNmToKgm(str.trans2.Mu).toFixed(0)} kg·m/m</td>
+          <td class="py-2 px-3 text-right">—</td>
+          <td class="py-2 px-3 text-right font-bold text-indigo-600">${str.trans1.flex.As_design.toFixed(2)}/${str.trans2.flex.As_design.toFixed(2)} cm²/m</td>
+          <td class="py-2 px-3 font-semibold text-slate-900">${str.dbTrans.name} @ ${str.trans1.spacing}/${str.trans2.spacing} cm</td>
+          <td class="py-2 px-3 text-center">${badge(true)}</td>
+        </tr>`;
+    }
+  }
+
+  generateCalculationReport() {
+    const container = document.getElementById('calculation_report_content');
+    if (!container) return;
+    const isIsolated = this.data.footing_type === 'aislada';
+    container.innerHTML = isIsolated ? this._reportIsolated() : this._reportCombined();
+  }
+
+  _sectionTitle(text) {
+    return `<h2 class="text-base font-extrabold text-slate-900 border-b-2 border-indigo-600 pb-1.5 mb-3 mt-8">${text}</h2>`;
+  }
+
+  _table(headers, rows) {
+    return `<table class="w-full text-xs border-collapse mb-4">
+      <thead><tr class="bg-slate-100 text-slate-600 font-bold">${headers.map(h => `<th class="border border-slate-300 px-2 py-1.5 text-left">${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(r => `<tr>${r.map(c => `<td class="border border-slate-300 px-2 py-1.5">${c}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  _badgeHtml(pass) {
+    return `<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold ${pass ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${pass ? 'CUMPLE' : 'NO CUMPLE'}</span>`;
+  }
+
+  _rebarTableHtml() {
+    const sched = this.rebarSchedule;
+    if (!sched) return '';
+    const rows = sched.rows.map(r => [r.mark, r.element, r.diameter_name, `${r.unitLength_m.toFixed(2)} m`, r.quantity, `${r.totalLength_m.toFixed(1)} m`, `${r.weight_kg.toFixed(1)} kg`]);
+    rows.push(['', '<b>TOTAL</b>', '', '', '', '', `<b>${sched.totalWeight_kg.toFixed(1)} kg</b>`]);
+    return this._table(['Marca', 'Elemento', 'Ø', 'Long. (1 barra)', 'Cant.', 'Long. Total', 'Peso'], rows);
+  }
+
+  _reportIsolated() {
+    const d = this.data.isolated, fnd = this.data.foundation, mat = this.data.materials;
+    const geo = this.bearingResults, str = this.structResults;
+    let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA AISLADA</h1>
+      <p class="text-xs text-slate-500 mb-6">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+
+    html += this._sectionTitle('1. Datos de Entrada');
+    html += this._table(['Parámetro', 'Valor'], [
+      ['Dimensiones en planta (L × B)', `${d.L.toFixed(2)} × ${d.B.toFixed(2)} m`],
+      ['Peralte total (h)', `${d.h.toFixed(2)} m`],
+      ['Columna (col_L × col_B)', `${d.col_L.toFixed(2)} × ${d.col_B.toFixed(2)} m`],
+      ['Profundidad de desplante (Df)', `${d.Df.toFixed(2)} m`],
+      ['Carga de servicio — muerta / viva', `${d.Pd.toFixed(1)} / ${d.Pl.toFixed(1)} tn`],
+      ['Momento de servicio Mx (D/L)', `${d.Mx_d.toFixed(1)} / ${d.Mx_l.toFixed(1)} tn·m`],
+      ['Momento de servicio My (D/L)', `${d.My_d.toFixed(1)} / ${d.My_l.toFixed(1)} tn·m`],
+      ['Peso específico del suelo (γs)', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`],
+      ['Capacidad portante admisible (q_adm)', `${fnd.q_adm_kgcm2.toFixed(2)} kg/cm²`],
+      [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
+    ]);
+
+    html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
+    html += `<p class="text-xs text-slate-600 mb-2">Peso propio de la zapata: ${geo.W_footing_tn.toFixed(2)} tn. Peso del relleno sobre la zapata: ${geo.W_soil_tn.toFixed(2)} tn. Carga total transmitida al suelo N = ${geo.N_tn.toFixed(2)} tn.</p>`;
+    html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
+      ['Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ex) <= geo.ex_max)],
+      ['Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ey) <= geo.ey_max)],
+      ['Presión máxima de contacto q_max', `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.pass_bearing)],
+    ]);
+    if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
+
+    html += this._sectionTitle('3. Diseño Estructural — Punzonamiento (Corte en 2 Direcciones)');
+    html += `<p class="text-xs text-slate-600 mb-2">Perímetro crítico a d/2 de las caras de la columna (d promedio = ${(str.punching.d_avg * 100).toFixed(1)} cm), bo = ${(str.punching.bo * 100).toFixed(1)} cm, βc = ${str.punching.betaC.toFixed(2)}.</p>`;
+    html += this._table(['', 'Valor'], [
+      ['Carga última en columna (Pu)', `${knToKg(str.Pu).toFixed(0)} kg`],
+      ['Cortante actuante Vu (Pu − qu·área crítica)', `${knToKg(str.punching.Vu).toFixed(0)} kg`],
+      ['Vc1 = 0.53(1+2/βc)√f\'c·bo·d', `${knToKg(str.punching.Vc1).toFixed(0)} kg`],
+      ['Vc2 = 0.27(αs·d/bo+2)√f\'c·bo·d', `${knToKg(str.punching.Vc2).toFixed(0)} kg`],
+      ['Vc3 = 1.06√f\'c·bo·d', `${knToKg(str.punching.Vc3).toFixed(0)} kg`],
+      ['φVc (mínimo de los 3, φ=0.85)', `${knToKg(str.punching.phiVc).toFixed(0)} kg`],
+      ['Verificación Vu ≤ φVc', this._badgeHtml(str.punching.pass)],
+    ]);
+
+    html += this._sectionTitle('4. Diseño Estructural — Corte en Una Dirección y Flexión');
+    [['L', str.L_dir, d.L], ['B', str.B_dir, d.B]].forEach(([axis, res, dim]) => {
+      html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">4.${axis === 'L' ? '1' : '2'} Franja dirección ${axis} (voladizo lado ${res.strip.side}, Lc = ${res.strip.Lc.toFixed(3)} m)</h3>`;
+      html += this._table(['', 'Valor'], [
+        ['Momento último Mu (en la cara de la columna)', `${kNmToKgm(res.strip.M).toFixed(0)} kg·m`],
+        ['Cortante último Vu (a "d" de la cara)', `${knToKg(res.shear.V).toFixed(0)} kg`],
+        [`Peralte efectivo d`, `${((axis === 'L' ? str.d_L : str.d_B) * 100).toFixed(1)} cm`],
+        ['φVc (corte en una dirección)', `${knToKg(res.phiVc).toFixed(0)} kg`],
+        ['Verificación por corte Vu ≤ φVc', this._badgeHtml(res.pass_shear)],
+        ['Cuantía de diseño ρ', res.flex.rho_design.toFixed(4)],
+        ['Acero requerido (As)', `${res.flex.As_design.toFixed(2)} cm² (${res.As_per_m.toFixed(2)} cm²/m)`],
+      ]);
+    });
+
+    html += this._sectionTitle('5. Distribución del Acero — Franja del Lado Corto (ACI 318 15.4.4 / E.060)');
+    html += `<p class="text-xs text-slate-600 mb-2">β = lado largo/lado corto = ${str.beta.toFixed(2)}. Fracción en banda central = 2/(β+1) = ${str.bandFactor.toFixed(3)}. Ancho de banda = ${str.banding.bandWidth.toFixed(2)} m (igual al lado corto), centrada en la columna.</p>`;
+    html += this._table(['Zona', 'As requerido', 'Armado colocado'], [
+      ['Banda central', `${str.banding.As_band_per_m.toFixed(2)} cm²/m`, `${str.dbMain.name} @ ${str.banding.sp_band} cm`],
+      ['Franjas exteriores (c/u)', str.banding.sp_outer ? `${str.banding.As_outer_per_m.toFixed(2)} cm²/m` : 'Acero mínimo', str.banding.sp_outer ? `${str.dbMain.name} @ ${str.banding.sp_outer} cm` : `${str.dbMain.name} @ ${str.banding.sp_band} cm (continúa igual)`],
+      ['Dirección larga (uniforme en todo el ancho)', `${(str.isLLong ? str.L_dir.As_per_m : str.B_dir.As_per_m).toFixed(2)} cm²/m`, `${str.dbMain.name} @ ${str.isLLong ? str.L_dir.spacing : str.B_dir.spacing} cm`],
+    ]);
+
+    html += this._sectionTitle('6. Longitud de Desarrollo');
+    html += this._table(['', 'Valor'], [
+      ['Longitud de desarrollo requerida (ld)', `${str.development.ld_req_cm.toFixed(1)} cm`],
+      ['Longitud disponible, dirección L (voladizo − recubrimiento)', `${str.development.ld_avail_L_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_L)}`],
+      ['Longitud disponible, dirección B (voladizo − recubrimiento)', `${str.development.ld_avail_B_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_B)}`],
+    ]);
+
+    html += this._sectionTitle('7. Cuadro de Habilitación de Acero');
+    html += this._rebarTableHtml();
+
+    return html;
+  }
+
+  _reportCombined() {
+    const d = this.data.combined, fnd = this.data.foundation, mat = this.data.materials;
+    const geo = this.bearingResults, str = this.structResults;
+    let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA COMBINADA</h1>
+      <p class="text-xs text-slate-500 mb-6">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+
+    html += this._sectionTitle('1. Datos de Entrada');
+    html += this._table(['Parámetro', 'Valor'], [
+      ['Dimensiones (L × B)', `${d.L.toFixed(2)} × ${d.B.toFixed(2)} m`],
+      ['Peralte total (h)', `${d.h.toFixed(2)} m`],
+      ['Posición Columna 1 (a1) / Columna 2 (a1+s)', `${d.a1.toFixed(2)} m / ${(d.a1 + d.s).toFixed(2)} m`],
+      ['Columna 1 (col1_L × col1_B)', `${d.col1_L.toFixed(2)} × ${d.col1_B.toFixed(2)} m`],
+      ['Columna 2 (col2_L × col2_B)', `${d.col2_L.toFixed(2)} × ${d.col2_B.toFixed(2)} m`],
+      ['Carga de servicio Columna 1 (D/L)', `${d.P1d.toFixed(1)} / ${d.P1l.toFixed(1)} tn`],
+      ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(1)} / ${d.P2l.toFixed(1)} tn`],
+      ['Capacidad portante admisible (q_adm)', `${fnd.q_adm_kgcm2.toFixed(2)} kg/cm²`],
+      [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
+    ]);
+
+    html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
+    html += `<p class="text-xs text-slate-600 mb-2">Resultante de columnas R = ${geo.R_tn.toFixed(2)} tn, ubicada a x̄ = ${geo.x_R.toFixed(3)} m del borde izquierdo. Con el peso propio, la resultante total N = ${geo.N_tn.toFixed(2)} tn actúa a x_N = ${geo.x_N.toFixed(3)} m (centro geométrico de la zapata en L/2 = ${(d.L / 2).toFixed(3)} m).</p>`;
+    html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
+      ['Excentricidad e = x_N − L/2', `${(geo.e * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.e_max * 100).toFixed(2)} cm`, this._badgeHtml(geo.within_kern)],
+      ['Presión máxima de contacto q_max', `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.pass_bearing)],
+    ]);
+    if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
+
+    html += this._sectionTitle('3. Análisis Longitudinal (Viga Invertida) — Cargas Factoradas');
+    html += `<p class="text-xs text-slate-600 mb-2">Pu1 = ${knToKg(str.Pu1).toFixed(0)} kg, Pu2 = ${knToKg(str.Pu2).toFixed(0)} kg (U = 1.2D + 1.6L). Momento máximo positivo (voladizos, tracción inferior) M+ = ${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m en x = ${str.x_pos.toFixed(2)} m. Momento máximo negativo (entre columnas, tracción superior) M− = ${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m en x = ${str.x_neg.toFixed(2)} m.</p>`;
+
+    html += this._sectionTitle('4. Acero Longitudinal Principal');
+    html += this._table(['', 'Inferior (M+)', 'Superior (M−)'], [
+      ['Momento de diseño', `${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m`, `${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m`],
+      ['Cuantía de diseño ρ', str.bottom.rho_design.toFixed(4), str.top.rho_design.toFixed(4)],
+      ['As requerido', `${str.bottom.As_design.toFixed(2)} cm² (${str.bottom.As_per_m.toFixed(2)} cm²/m)`, `${str.top.As_design.toFixed(2)} cm² (${str.top.As_per_m.toFixed(2)} cm²/m)`],
+      ['Armado colocado', `${str.dbMain.name} @ ${str.bottom.spacing} cm`, `${str.dbMain.name} @ ${str.top.spacing} cm`],
+    ]);
+
+    html += this._sectionTitle('5. Corte en Una Dirección');
+    html += this._table(['Sección crítica (a "d" de la cara)', 'Vu', 'φVc', 'Estado'], str.shearChecks.map(c => [c.label, `${knToKg(c.Vu).toFixed(0)} kg`, `${knToKg(str.phiVc_oneWay).toFixed(0)} kg`, this._badgeHtml(c.pass)]));
+
+    html += this._sectionTitle('6. Punzonamiento por Columna');
+    if (str.perimetersOverlap) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ Los perímetros críticos de punzonamiento de ambas columnas se traslapan (separación libre ${str.halfGapAvailable.toFixed(2)} m &lt; d = ${str.d_main.toFixed(2)} m) — se recomienda un análisis conjunto del perímetro combinado.</p>`;
+    [['Columna 1', str.punch1], ['Columna 2', str.punch2]].forEach(([label, p]) => {
+      html += this._table(['', label], [
+        ['bo (perímetro crítico)', `${(p.bo * 100).toFixed(1)} cm`],
+        ['Vu', `${knToKg(p.Vu).toFixed(0)} kg`],
+        ['φVc', `${knToKg(p.phiVc).toFixed(0)} kg`],
+        ['Estado', this._badgeHtml(p.pass)],
+      ]);
+    });
+
+    html += this._sectionTitle('7. Acero Transversal Bajo Cada Columna');
+    html += this._table(['', 'Columna 1', 'Columna 2'], [
+      ['Voladizo transversal', `${str.trans1.voladizo.toFixed(3)} m`, `${str.trans2.voladizo.toFixed(3)} m`],
+      ['Presión local q_u', `${(str.trans1.q_local).toFixed(1)} kPa`, `${(str.trans2.q_local).toFixed(1)} kPa`],
+      ['Momento Mu', `${kNmToKgm(str.trans1.Mu).toFixed(0)} kg·m/m`, `${kNmToKgm(str.trans2.Mu).toFixed(0)} kg·m/m`],
+      ['As requerido', `${str.trans1.flex.As_design.toFixed(2)} cm²/m`, `${str.trans2.flex.As_design.toFixed(2)} cm²/m`],
+      ['Armado colocado', `${str.dbTrans.name} @ ${str.trans1.spacing} cm`, `${str.dbTrans.name} @ ${str.trans2.spacing} cm`],
+    ]);
+
+    html += this._sectionTitle('8. Cuadro de Habilitación de Acero');
+    html += this._rebarTableHtml();
+
+    return html;
+  }
+}
