@@ -24,6 +24,14 @@ const COLORS_COMBINED = {
   dowels: 0x64748b,
 };
 
+const COLORS_CONNECTED = {
+  slab1: 0x2563eb,       // Malla de la Zapata 1 (excéntrica) — azul
+  slab2: 0xdc2626,       // Malla de la Zapata 2 (interior) — rojo
+  strap_top: 0xf97316,   // Acero superior de la viga de conexión — naranja
+  strap_bottom: 0xeab308, // Acero inferior de la viga de conexión — amarillo
+  dowels: 0x64748b,
+};
+
 const REBAR_EXAGGERATION = 3;
 
 export class FootingRenderer3D {
@@ -131,15 +139,14 @@ export class FootingRenderer3D {
     this.footingData = footingData;
     this.structResults = structResults;
     if (!footingData || !structResults) return;
-    this.colors = footingData.footing_type === 'aislada' ? COLORS_ISOLATED : COLORS_COMBINED;
+    const type = footingData.footing_type;
+    this.colors = { aislada: COLORS_ISOLATED, combinada: COLORS_COMBINED, conectada: COLORS_CONNECTED }[type];
     this._buildSubgroups();
     this._clearGroup(this.concreteGroup);
     this._clearGroup(this.annotationGroup);
-    if (footingData.footing_type === 'aislada') {
-      this._buildIsolated(footingData, structResults);
-    } else {
-      this._buildCombined(footingData, structResults);
-    }
+    if (type === 'aislada') this._buildIsolated(footingData, structResults);
+    else if (type === 'combinada') this._buildCombined(footingData, structResults);
+    else this._buildConnected(footingData, structResults);
   }
 
   _clearGroup(group) {
@@ -159,8 +166,10 @@ export class FootingRenderer3D {
   setRebarRealScale(useReal) {
     this.rebarScaleFactor = useReal ? 1 : REBAR_EXAGGERATION;
     if (!this.footingData || !this.structResults) return;
-    if (this.footingData.footing_type === 'aislada') this._buildIsolated(this.footingData, this.structResults);
-    else this._buildCombined(this.footingData, this.structResults);
+    const type = this.footingData.footing_type;
+    if (type === 'aislada') this._buildIsolated(this.footingData, this.structResults);
+    else if (type === 'combinada') this._buildCombined(this.footingData, this.structResults);
+    else this._buildConnected(this.footingData, this.structResults);
   }
 
   _bar(p1, p2, radius, color) {
@@ -339,6 +348,100 @@ export class FootingRenderer3D {
   }
 
   // ===================================================================
+  // ZAPATA CONECTADA (excéntrica + interior, con viga de conexión)
+  // ===================================================================
+  _buildConnected(fd, str) {
+    const { connected } = fd;
+    const { L1, B1, h1, col1_L, col1_B, L2, B2, h2, col2_L, col2_B, s, strap_width, strap_height } = connected;
+    const cover = fd.materials.cover_footing;
+    const c1 = col1_L / 2.0;
+    const c2 = c1 + s;
+    const stemH1 = Math.max(0.5, Math.min(1.2, h1 * 1.4));
+    const stemH2 = Math.max(0.5, Math.min(1.2, h2 * 1.4));
+
+    this._addConcreteBox(L1 / 2, h1 / 2, 0, L1, h1, B1);
+    this._addConcreteBox(c1, h1 + stemH1 / 2, 0, col1_L, stemH1, col1_B);
+    this._addConcreteBox(c2, h2 / 2, 0, L2, h2, B2);
+    this._addConcreteBox(c2, h2 + stemH2 / 2, 0, col2_L, stemH2, col2_B);
+
+    const strapY0 = Math.min(h1, h2);
+    this._addConcreteBox((c1 + c2) / 2, strapY0 + strap_height / 2, 0, c2 - c1, strap_height, strap_width);
+
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const dbMain = str.dbMain;
+    const rMain = dbMain.diameter_m / 2;
+
+    const positionsIn = (spacingCm, half) => {
+      const sp = Math.max(0.03, (spacingCm || 20) / 100);
+      const list = [];
+      for (let p = -half + sp / 2; p <= half - sp / 2 + 1e-6; p += sp) list.push(p);
+      return list.length ? list : [0];
+    };
+
+    const drawSlabRebar = (slab, cx, L, B, colL, colB, colCx, topH, colorKey) => {
+      const yLow = cover + rMain, yHigh = yLow + rMain + rMain;
+      const longIsL = slab.isLLong;
+      const yLongDir = longIsL ? yLow : yHigh;
+      const yShortDir = longIsL ? yHigh : yLow;
+
+      const longSpacing = longIsL ? slab.L_dir.spacing : slab.B_dir.spacing;
+      const longAxisIsX = longIsL;
+      const longRunHalf = (longAxisIsX ? L : B) / 2 - cover;
+      const longSpreadHalf = (longAxisIsX ? B : L) / 2;
+      positionsIn(longSpacing, longSpreadHalf).forEach((p) => {
+        if (longAxisIsX) this._addBar(V(cx - longRunHalf, yLongDir, p), V(cx + longRunHalf, yLongDir, p), rMain, colorKey);
+        else this._addBar(V(cx + p, yLongDir, -longRunHalf), V(cx + p, yLongDir, longRunHalf), rMain, colorKey);
+      });
+
+      const shortAxisIsX = !longAxisIsX;
+      const shortRunHalf = (shortAxisIsX ? L : B) / 2 - cover;
+      const bandHalf = slab.banding.bandWidth / 2;
+      positionsIn(slab.banding.sp_band, bandHalf).forEach((p) => {
+        if (shortAxisIsX) this._addBar(V(cx - shortRunHalf, yShortDir, p), V(cx + shortRunHalf, yShortDir, p), rMain, colorKey);
+        else this._addBar(V(cx + p, yShortDir, -shortRunHalf), V(cx + p, yShortDir, shortRunHalf), rMain, colorKey);
+      });
+      if (slab.banding.sp_outer) {
+        const outerTo = (shortAxisIsX ? B : L) / 2;
+        const sp = Math.max(0.03, slab.banding.sp_outer / 100);
+        for (let p = bandHalf + sp / 2; p <= outerTo - sp / 2 + 1e-6; p += sp) {
+          [p, -p].forEach((pp) => {
+            if (shortAxisIsX) this._addBar(V(cx - shortRunHalf, yShortDir, pp), V(cx + shortRunHalf, yShortDir, pp), rMain, colorKey);
+            else this._addBar(V(cx + pp, yShortDir, -shortRunHalf), V(cx + pp, yShortDir, shortRunHalf), rMain, colorKey);
+          });
+        }
+      }
+
+      const yDowelBot = Math.max(yLow, yHigh) + rMain;
+      [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([sx, sz]) => {
+        const dx = cx + colCx + sx * (colL / 2 - cover);
+        const dz = sz * (colB / 2 - cover);
+        this._addBar(V(dx, yDowelBot, dz), V(dx, topH - cover, dz), rMain * 0.6, 'dowels');
+      });
+    };
+
+    drawSlabRebar(str.slab1, L1 / 2, L1, B1, col1_L, col1_B, c1 - L1 / 2, h1 + stemH1, 'slab1');
+    drawSlabRebar(str.slab2, c2, L2, B2, col2_L, col2_B, 0, h2 + stemH2, 'slab2');
+
+    // Acero de la viga de conexión (superior e inferior), a lo largo de su luz
+    const yStrapTop = strapY0 + strap_height - cover - rMain;
+    const yStrapBot = strapY0 + cover + rMain;
+    const zHalfStrap = strap_width / 2 - cover;
+    const nTop = Math.max(2, str.strap.n_bars_top);
+    const nBot = Math.max(2, str.strap.n_bars_bottom);
+    for (let i = 0; i < nTop; i++) {
+      const z = nTop > 1 ? -zHalfStrap + (i * 2 * zHalfStrap) / (nTop - 1) : 0;
+      this._addBar(V(c1, yStrapTop, z), V(c2, yStrapTop, z), rMain, 'strap_top');
+    }
+    for (let i = 0; i < nBot; i++) {
+      const z = nBot > 1 ? -zHalfStrap + (i * 2 * zHalfStrap) / (nBot - 1) : 0;
+      this._addBar(V(c1, yStrapBot, z), V(c2, yStrapBot, z), rMain, 'strap_bottom');
+    }
+
+    this._buildAnnotationsConnected(fd, str, c1, c2, Math.max(stemH1, stemH2));
+    this._fitCamera(c2 + L2 / 2, Math.max(B1, B2), Math.max(h1 + stemH1, h2 + stemH2));
+  }
+
+  // ===================================================================
   // ETIQUETAS Y COTAS
   // ===================================================================
   _makeTextSprite(lines, { color = '#0f172a', fontPx = 32, weight = 600, align = 'left' } = {}) {
@@ -452,6 +555,40 @@ export class FootingRenderer3D {
     const top = vertH + 0.35 * vertH;
     labels.forEach(([anchor, text], i) => {
       this._addLeaderLabel(anchor, V(labelX, top - i * 0.3 * vertH, B * 0.5), text);
+    });
+  }
+
+  _buildAnnotationsConnected(fd, str, c1, c2, stemH) {
+    const { connected } = fd;
+    const { L1, B1, L2, B2, h1, h2 } = connected;
+    const cover = fd.materials.cover_footing;
+    const totalSpan = c2 + L2 / 2;
+    const maxDim = Math.max(totalSpan, B1, B2);
+    const vertH = Math.max(h1, h2) + stemH;
+    this._labelSize = maxDim * 0.018;
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+    this._addDimension(V(0, 0, Math.max(B1, B2) / 2), V(0, h1, Math.max(B1, B2) / 2), h1.toFixed(2), V(-1, 0, 0), 0.06 * maxDim);
+    this._addDimension(V(0, 0, Math.max(B1, B2) * 0.7), V(totalSpan, 0, Math.max(B1, B2) * 0.7), `s = ${connected.s.toFixed(2)} m`, V(0, 0, 1), 0.06 * maxDim);
+
+    // Marca del límite de propiedad (x=0)
+    const propLineTop = vertH + 0.15 * vertH;
+    const group = this.annotationGroup;
+    const lineMat = new THREE.LineDashedMaterial({ color: 0xdc2626, dashSize: 0.08 * maxDim, gapSize: 0.05 * maxDim });
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(0, 0, -Math.max(B1, B2) * 0.6), V(0, propLineTop, -Math.max(B1, B2) * 0.6)]), lineMat);
+    line.computeLineDistances();
+    group.add(line);
+    const sprite = this._makeTextSprite('Límite de propiedad', { color: '#dc2626', fontPx: 30, weight: 700, align: 'left' });
+    sprite.position.copy(V(0.05 * maxDim, propLineTop, -Math.max(B1, B2) * 0.6));
+    group.add(sprite);
+
+    const labels = [
+      [V(L1 / 2, cover, 0), ['Zapata 1 (excéntrica)']],
+      [V(c2, cover, 0), ['Zapata 2 (interior)']],
+      [V((c1 + c2) / 2, Math.min(h1, h2) + connected.strap_height / 2, connected.strap_width / 2), ['Viga de conexión']],
+    ];
+    labels.forEach(([anchor, text], i) => {
+      this._addLeaderLabel(anchor, V(totalSpan + 0.12 * maxDim, vertH * 0.8 - i * 0.28 * vertH, 0), text);
     });
   }
 

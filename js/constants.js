@@ -23,7 +23,7 @@ export const REBAR_TABLE = [
 ];
 
 export const DEFAULT_FOOTING_DATA = {
-  footing_type: 'aislada', // 'aislada' | 'combinada'
+  footing_type: 'aislada', // 'aislada' | 'combinada' | 'conectada'
 
   // ---- Zapata Aislada ----
   isolated: {
@@ -55,6 +55,26 @@ export const DEFAULT_FOOTING_DATA = {
     Df: 1.60,
     P1d: 40.0, P1l: 20.0, // columna 1: carga muerta / viva de servicio (tn)
     P2d: 55.0, P2l: 25.0, // columna 2
+  },
+
+  // ---- Zapata Conectada (excéntrica + interior, unidas por viga de
+  // conexión / "strap beam"). La columna 1 está en el límite de propiedad:
+  // su cara exterior coincide con el borde de la Zapata 1 (no hay
+  // proyección de zapata más allá de esa cara), por lo que su carga cae
+  // excéntrica respecto al centro de su propia zapata — la viga de
+  // conexión transfiere una fuerza a la Zapata 2 (interior, diseñada
+  // concéntrica bajo su columna) para que la Zapata 1 trabaje con presión
+  // uniforme sin necesitar invadir el terreno vecino.
+  connected: {
+    L1: 1.60, B1: 2.20, h1: 0.50, // Zapata 1 (excéntrica, en el límite)
+    col1_L: 0.40, col1_B: 0.40,
+    L2: 2.20, B2: 2.20, h2: 0.50, // Zapata 2 (interior, concéntrica)
+    col2_L: 0.40, col2_B: 0.40,
+    s: 4.50,          // separación entre ejes de columna 1 y columna 2
+    strap_width: 0.30, strap_height: 0.60, // viga de conexión
+    Df: 1.50,
+    P1d: 25.0, P1l: 10.0, // columna 1 (excéntrica): carga de servicio
+    P2d: 45.0, P2l: 20.0, // columna 2 (interior)
   },
 
   foundation: {
@@ -114,6 +134,15 @@ export const PRESET_PROJECTS = {
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'combinada';
+      return d;
+    })()
+  },
+  zapata_conectada_tipica: {
+    title: 'Zapata Conectada — Columna de Límite de Propiedad + Viga de Conexión',
+    desc: 'Columna 1 en el límite de propiedad (zapata excéntrica) conectada mediante viga de conexión a la Zapata 2 (interior, concéntrica bajo su columna).',
+    data: (() => {
+      const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
+      d.footing_type = 'conectada';
       return d;
     })()
   }

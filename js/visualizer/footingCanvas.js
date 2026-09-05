@@ -91,13 +91,14 @@ export class FootingCanvasRenderer {
     ctx.clearRect(0, 0, width, height);
     this.drawGrid(width, height);
 
-    const isIsolated = this.footingData.footing_type === 'aislada';
-    if (this.viewMode === 'diagram' && !isIsolated) {
+    const type = this.footingData.footing_type;
+    if (this.viewMode === 'diagram' && type !== 'aislada') {
       this.renderDiagram(width, height);
       return;
     }
-    if (isIsolated) this.renderIsolated(width, height);
-    else this.renderCombined(width, height);
+    if (type === 'aislada') this.renderIsolated(width, height);
+    else if (type === 'combinada') this.renderCombined(width, height);
+    else this.renderConnected(width, height);
   }
 
   drawGrid(width, height) {
@@ -205,8 +206,27 @@ export class FootingCanvasRenderer {
     const { L, B, col_L, col_B } = isolated;
     if (!str) return;
     ctx.save();
-    // Barras dirección L (paralelas al eje X), espaciadas a lo largo de B
-    const spB = str.isLLong ? (str.banding.bandWidth ? null : null) : null; // ver abajo por tramo
+    this._drawSlabRebarGrid(ctx, t, str, 0, L, B, isolated.ex_col || 0, isolated.ey_col || 0, col_L, col_B);
+    ctx.restore();
+
+    const longSpacing = str.isLLong ? str.L_dir.spacing : str.B_dir.spacing;
+    ctx.save();
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillStyle = '#334155';
+    ctx.fillText(`Azul: ${str.isLLong ? 'paralelo a L' : 'paralelo a B'} (dirección larga, uniforme) @ ${longSpacing} cm`, 10, 18);
+    ctx.fillText(`Rojo: banda central (dirección corta) @ ${str.banding.sp_band} cm`, 10, 34);
+    if (str.banding.sp_outer) ctx.fillText(`Naranja: franjas exteriores (dirección corta) @ ${str.banding.sp_outer} cm`, 10, 50);
+    ctx.restore();
+  }
+
+  /** Dibuja la malla de acero de UNA losa de zapata (dirección larga
+   * uniforme, en azul; dirección corta en banda central roja + franjas
+   * exteriores naranjas) — compartido por la zapata aislada y por cada una
+   * de las dos zapatas de una zapata conectada. `cx` es el centro de esa
+   * losa en coordenadas de mundo (0 para la aislada, que ya está centrada
+   * en el origen); `colCx`/`colCy` son la posición de la columna relativa
+   * a ese centro. */
+  _drawSlabRebarGrid(ctx, t, slab, cx, L, B, colCx, colCy, colL, colB) {
     const drawParallelBars = (alongAxis, spacingCm, runHalf, spreadHalf, color) => {
       if (!spacingCm) return;
       const spacing_m = spacingCm / 100;
@@ -215,53 +235,41 @@ export class FootingCanvasRenderer {
       for (let pos = -spreadHalf + spacing_m / 2; pos <= spreadHalf; pos += spacing_m) {
         ctx.beginPath();
         if (alongAxis === 'L') {
-          ctx.moveTo(t.toX(-runHalf), t.toY(pos));
-          ctx.lineTo(t.toX(runHalf), t.toY(pos));
+          ctx.moveTo(t.toX(cx - runHalf), t.toY(pos));
+          ctx.lineTo(t.toX(cx + runHalf), t.toY(pos));
         } else {
-          ctx.moveTo(t.toX(pos), t.toY(-runHalf));
-          ctx.lineTo(t.toX(pos), t.toY(runHalf));
+          ctx.moveTo(t.toX(cx + pos), t.toY(-runHalf));
+          ctx.lineTo(t.toX(cx + pos), t.toY(runHalf));
         }
         ctx.stroke();
       }
     };
 
-    const longIsL = str.isLLong;
-    const longSpacing = longIsL ? str.L_dir.spacing : str.B_dir.spacing;
-    // Dirección larga (uniforme)
+    const longIsL = slab.isLLong;
+    const longSpacing = longIsL ? slab.L_dir.spacing : slab.B_dir.spacing;
     drawParallelBars(longIsL ? 'L' : 'B', longSpacing, longIsL ? L / 2 : B / 2, longIsL ? B / 2 : L / 2, '#2563eb');
-    // Dirección corta: banda central + franjas exteriores
     const shortAxis = longIsL ? 'B' : 'L';
     const shortRunHalf = longIsL ? B / 2 : L / 2;
-    const bandHalf = str.banding.bandWidth / 2;
-    drawParallelBars(shortAxis, str.banding.sp_band, shortRunHalf, bandHalf, '#dc2626');
-    if (str.banding.sp_outer) {
+    const bandHalf = slab.banding.bandWidth / 2;
+    drawParallelBars(shortAxis, slab.banding.sp_band, shortRunHalf, bandHalf, '#dc2626');
+    if (slab.banding.sp_outer) {
       const outerFrom = bandHalf;
       const outerTo = longIsL ? L / 2 : B / 2;
-      const spacing_m = str.banding.sp_outer / 100;
+      const spacing_m = slab.banding.sp_outer / 100;
       ctx.strokeStyle = '#f97316';
       for (let pos = outerFrom + spacing_m / 2; pos <= outerTo; pos += spacing_m) {
         [pos, -pos].forEach((p) => {
           ctx.beginPath();
-          if (shortAxis === 'L') { ctx.moveTo(t.toX(-shortRunHalf), t.toY(p)); ctx.lineTo(t.toX(shortRunHalf), t.toY(p)); }
-          else { ctx.moveTo(t.toX(p), t.toY(-shortRunHalf)); ctx.lineTo(t.toX(p), t.toY(shortRunHalf)); }
+          if (shortAxis === 'L') { ctx.moveTo(t.toX(cx - shortRunHalf), t.toY(p)); ctx.lineTo(t.toX(cx + shortRunHalf), t.toY(p)); }
+          else { ctx.moveTo(t.toX(cx + p), t.toY(-shortRunHalf)); ctx.lineTo(t.toX(cx + p), t.toY(shortRunHalf)); }
           ctx.stroke();
         });
       }
     }
-    // Columna (referencia)
     ctx.strokeStyle = '#1e293b';
     ctx.setLineDash([4, 3]);
-    ctx.strokeRect(t.toX(-col_L / 2), t.toY(col_B / 2), col_L * t.scale, col_B * t.scale);
+    ctx.strokeRect(t.toX(cx + colCx - colL / 2), t.toY(colCy + colB / 2), colL * t.scale, colB * t.scale);
     ctx.setLineDash([]);
-    ctx.restore();
-
-    ctx.save();
-    ctx.font = '11px Inter, sans-serif';
-    ctx.fillStyle = '#334155';
-    ctx.fillText(`Azul: ${longIsL ? 'paralelo a L' : 'paralelo a B'} (dirección larga, uniforme) @ ${longSpacing} cm`, 10, 18);
-    ctx.fillText(`Rojo: banda central (dirección corta) @ ${str.banding.sp_band} cm`, 10, 34);
-    if (str.banding.sp_outer) ctx.fillText(`Naranja: franjas exteriores (dirección corta) @ ${str.banding.sp_outer} cm`, 10, 50);
-    ctx.restore();
   }
 
   drawIsolatedSection(width, height) {
@@ -474,6 +482,127 @@ export class FootingCanvasRenderer {
     ctx.restore();
 
     this._dimLine(ctx, t.toX(0), t.toY(0), t.toX(L), t.toY(0), `L = ${L.toFixed(2)} m`, 26);
+  }
+
+  // ===================================================================
+  // ZAPATA CONECTADA (excéntrica + interior, con viga de conexión)
+  // ===================================================================
+  renderConnected(width, height) {
+    const { connected } = this.footingData;
+    const { L1, B1, L2, B2, col1_L, col1_B, col2_L, col2_B, s, strap_width } = connected;
+    const c1 = col1_L / 2.0; // eje de columna 1 (límite de propiedad en x=0)
+    const c2 = c1 + s;
+    const f2x0 = c2 - L2 / 2.0;
+    const maxB = Math.max(B1, B2);
+    const ctx = this.ctx;
+
+    if (this.viewMode === 'plan' || this.viewMode === 'rebar') {
+      const t = this._worldTransform(width, height, { xMin: -0.5, xMax: Math.max(L1, f2x0 + L2) + 0.5, yMin: -maxB * 0.8, yMax: maxB * 0.8 });
+
+      ctx.save();
+      ctx.fillStyle = '#e7ebf1';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.rect(t.toX(0), t.toY(B1 / 2), L1 * t.scale, B1 * t.scale); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.rect(t.toX(f2x0), t.toY(B2 / 2), L2 * t.scale, B2 * t.scale); ctx.fill(); ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.strokeStyle = '#dc2626';
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(t.toX(0), t.toY(-maxB * 0.75)); ctx.lineTo(t.toX(0), t.toY(maxB * 0.75)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#dc2626';
+      ctx.font = '11px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('Límite de propiedad', t.toX(0) + 4, t.toY(maxB * 0.75) + 12);
+      ctx.restore();
+
+      if (this.viewMode === 'plan') {
+        ctx.save();
+        ctx.fillStyle = 'rgba(100,116,139,0.35)';
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.rect(t.toX(c1), t.toY(strap_width / 2), (c2 - c1) * t.scale, strap_width * t.scale); ctx.fill(); ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.fillStyle = '#94a3b8';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.rect(t.toX(c1 - col1_L / 2), t.toY(col1_B / 2), col1_L * t.scale, col1_B * t.scale); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.rect(t.toX(c2 - col2_L / 2), t.toY(col2_B / 2), col2_L * t.scale, col2_B * t.scale); ctx.fill(); ctx.stroke();
+        ctx.restore();
+
+        this._dimLine(ctx, t.toX(0), t.toY(-B1 / 2), t.toX(L1), t.toY(-B1 / 2), `L1 = ${L1.toFixed(2)} m`, 16);
+        this._dimLine(ctx, t.toX(c1), t.toY(maxB / 2) + 22, t.toX(c2), t.toY(maxB / 2) + 22, `s = ${s.toFixed(2)} m`);
+        this._dimLine(ctx, t.toX(f2x0), t.toY(-B2 / 2), t.toX(f2x0 + L2), t.toY(-B2 / 2), `L2 = ${L2.toFixed(2)} m`, 16);
+      } else {
+        const str = this.structResults;
+        if (str) {
+          this._drawSlabRebarGrid(ctx, t, str.slab1, L1 / 2, L1, B1, c1 - L1 / 2, 0, col1_L, col1_B);
+          this._drawSlabRebarGrid(ctx, t, str.slab2, c2, L2, B2, 0, 0, col2_L, col2_B);
+        }
+        ctx.save();
+        ctx.font = '11px Inter, sans-serif';
+        ctx.fillStyle = '#334155';
+        ctx.fillText('Azul: dirección larga (uniforme) — Rojo: banda central — Naranja: franjas exteriores', 10, 18);
+        ctx.restore();
+      }
+    } else if (this.viewMode === 'section') {
+      this.drawConnectedElevation(width, height, c1, c2, f2x0);
+    }
+  }
+
+  drawConnectedElevation(width, height, c1, c2, f2x0) {
+    const ctx = this.ctx;
+    const { connected } = this.footingData;
+    const { L1, h1, L2, h2, col1_L, col2_L, s, strap_height, Df } = connected;
+    const stemH = 0.8;
+    const maxH = Math.max(h1, h2);
+    const t = this._worldTransform(width, height, { xMin: -0.5, xMax: f2x0 + L2 + 0.5, yMin: -0.6, yMax: maxH + stemH + 0.8 });
+
+    ctx.save();
+    ctx.fillStyle = '#f2e9d8';
+    ctx.fillRect(0, t.toY(0), width, height - t.toY(0));
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = '#cbd5e1';
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.rect(t.toX(0), t.toY(h1), L1 * t.scale, h1 * t.scale); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(t.toX(f2x0), t.toY(h2), L2 * t.scale, h2 * t.scale); ctx.fill(); ctx.stroke();
+
+    // Viga de conexión, entre las dos zapatas, apoyada sobre ellas
+    const strapY = Math.min(h1, h2);
+    ctx.fillStyle = '#94a3b8';
+    ctx.beginPath(); ctx.rect(t.toX(c1), t.toY(strapY + strap_height), (c2 - c1) * t.scale, strap_height * t.scale); ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.beginPath(); ctx.rect(t.toX(c1 - col1_L / 2), t.toY(h1 + stemH), col1_L * t.scale, stemH * t.scale); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(t.toX(c2 - col2_L / 2), t.toY(h2 + stemH), col2_L * t.scale, stemH * t.scale); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = '#dc2626';
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(t.toX(0), t.toY(-0.4)); ctx.lineTo(t.toX(0), t.toY(maxH + stemH + 0.6)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#dc2626';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillText('Límite', t.toX(0) + 3, t.toY(maxH + stemH + 0.5));
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = '#8a6d1f';
+    ctx.setLineDash([5, 3]);
+    ctx.beginPath(); ctx.moveTo(t.toX(-0.4), t.toY(Df)); ctx.lineTo(t.toX(f2x0 + L2 + 0.4), t.toY(Df)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    this._dimLine(ctx, t.toX(0), t.toY(0), t.toX(f2x0 + L2), t.toY(0), `s = ${s.toFixed(2)} m (ejes de columna)`, 26);
   }
 
   renderDiagram(width, height) {

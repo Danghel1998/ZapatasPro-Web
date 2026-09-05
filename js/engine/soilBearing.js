@@ -128,3 +128,62 @@ export function calculateCombinedBearing(footingData) {
     pass_all: pass_bearing && within_kern,
   };
 }
+
+/**
+ * Verificación geotécnica de una zapata CONECTADA: Zapata 1 (excéntrica,
+ * columna en el límite de propiedad) + Zapata 2 (interior, concéntrica
+ * bajo su columna), unidas por una viga de conexión.
+ *
+ * Método de la viga rígida: se exige presión UNIFORME bajo cada zapata
+ * (cada una actúa en su propio centroide). De la estática del conjunto
+ * (2 ecuaciones: ΣFy=0 y ΣM=0 respecto al límite de propiedad, con N1
+ * actuando en el centroide de la Zapata 1 y N2 en el eje de la columna 2)
+ * resulta, en forma cerrada:
+ *   N1 = P1 · s / (s − e1),   R = N1 − P1,   N2 = P1 + P2 − N1
+ * donde e1 = L1/2 − col1_L/2 es la excentricidad de la columna 1 respecto
+ * al centro de su propia zapata (no puede crecer hacia el límite). R es la
+ * fuerza cortante que transmite la viga de conexión.
+ */
+export function calculateConnectedBearing(footingData) {
+  const { connected, foundation, materials } = footingData;
+  const { L1, B1, h1, L2, B2, h2, col1_L, s, Df } = connected;
+
+  const gamma_s = kgm3ToKnm3(foundation.gamma_kgm3);
+  const gamma_c = kgm3ToKnm3(materials.gamma_c_kgm3);
+  const q_adm = kgcm2ToKpa(foundation.q_adm_kgcm2);
+
+  const P1 = tnToKn(connected.P1d + connected.P1l);
+  const P2 = tnToKn(connected.P2d + connected.P2l);
+
+  const e1 = L1 / 2.0 - col1_L / 2.0;
+  const N1 = (P1 * s) / (s - e1);
+  const R = N1 - P1;
+  const N2 = P1 + P2 - N1;
+
+  const A1 = L1 * B1, A2 = L2 * B2;
+  const W1 = gamma_c * A1 * h1 + gamma_s * A1 * Math.max(0, Df - h1);
+  const W2 = gamma_c * A2 * h2 + gamma_s * A2 * Math.max(0, Df - h2);
+
+  const N1_total = N1 + W1;
+  const N2_total = N2 + W2;
+  const q1 = N1_total / A1;
+  const q2 = N2_total / A2;
+
+  const pass_bearing_1 = q1 <= q_adm;
+  const pass_bearing_2 = q2 <= q_adm;
+  const pass_positive_reaction = N2 > 0; // si N2 <= 0, el método de viga rígida no es aplicable (redimensionar)
+
+  return {
+    L1, B1, h1, L2, B2, h2, A1, A2, Df,
+    P1_tn: connected.P1d + connected.P1l, P2_tn: connected.P2d + connected.P2l,
+    e1, s,
+    N1, N1_tn: knToTn(N1), R, R_tn: knToTn(R), N2, N2_tn: knToTn(N2),
+    W1_tn: knToTn(W1), W2_tn: knToTn(W2),
+    N1_total, N2_total,
+    q1, q2,
+    q1_kgcm2: kpaToKgcm2(q1), q2_kgcm2: kpaToKgcm2(q2),
+    q_adm, q_adm_kgcm2: foundation.q_adm_kgcm2,
+    pass_bearing_1, pass_bearing_2, pass_positive_reaction,
+    pass_all: pass_bearing_1 && pass_bearing_2 && pass_positive_reaction,
+  };
+}
