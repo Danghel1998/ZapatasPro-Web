@@ -396,12 +396,14 @@ export class FootingCanvasRenderer {
     const lineDepth = longIsL ? yBottom : yTop;
     const dotDepth = longIsL ? yTop : yBottom;
 
-    // --- Esperas / arranque de columna: 2 barras rectas visibles en este
-    // corte, desde la parrilla de la zapata hasta cerca de la corona del
-    // muñón (recta, igual que en el Detalle 3D — el anclaje se verifica en
-    // compresión, no lleva gancho, así que no se dibuja uno aquí) ---
+    // --- Esperas / arranque de columna: 2 barras visibles en este corte,
+    // desde la parrilla de la zapata hasta cerca de la corona del muñón,
+    // con gancho de 90° hacia el interior en la base ---
     if (col_L && stemH) {
-      const dowelDepth = Math.min(lineDepth, dotDepth);
+      // La espera se apoya en la capa SUPERIOR (la más alejada del fondo)
+      // para que su gancho quede a una profundidad distinta de la línea
+      // principal y no quede tapado por ella al dibujarse encima.
+      const dowelDepth = Math.max(lineDepth, dotDepth);
       const yDowelBot = t.toY(dowelDepth);
       const yDowelTop = t.toY(h + stemH - cover);
       ctx.save();
@@ -411,6 +413,8 @@ export class FootingCanvasRenderer {
         const dx = ex + sign * (col_L / 2 - cover);
         const xPix = t.toX(dx);
         ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix, yDowelTop); ctx.stroke();
+        const hookPxDowel = hook * t.scale * 0.5;
+        ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix - sign * hookPxDowel, yDowelBot); ctx.stroke();
       });
       ctx.restore();
     }
