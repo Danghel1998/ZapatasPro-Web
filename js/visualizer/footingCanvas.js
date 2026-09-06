@@ -4,6 +4,8 @@
  * (para combinadas) diagramas de fuerza cortante y momento flector.
  */
 
+import { hookMainBar_m } from '../engine/concreteDesign.js';
+
 export class FootingCanvasRenderer {
   constructor(canvasElement) {
     this.canvas = canvasElement;
@@ -274,8 +276,9 @@ export class FootingCanvasRenderer {
 
   drawIsolatedSection(width, height) {
     const ctx = this.ctx;
-    const { isolated } = this.footingData;
+    const { isolated, materials } = this.footingData;
     const { L, h, col_L, Df } = isolated;
+    const ex = isolated.ex_col || 0;
     const stemH = 0.8; // muñón de columna dibujado, referencial
     const t = this._worldTransform(width, height, { xMin: -L * 0.75, xMax: L * 0.75, yMin: -0.6, yMax: h + stemH + 0.8 });
 
@@ -294,12 +297,15 @@ export class FootingCanvasRenderer {
     ctx.rect(t.toX(-L / 2), t.toY(h), L * t.scale, h * t.scale);
     ctx.fill(); ctx.stroke();
 
-    // Columna
+    // Columna (respeta la excentricidad de "Tipo de columna": interior=centrada, borde/esquina=al ras del borde)
     ctx.fillStyle = '#94a3b8';
     ctx.beginPath();
-    ctx.rect(t.toX(-col_L / 2), t.toY(h + stemH), col_L * t.scale, stemH * t.scale);
+    ctx.rect(t.toX(ex - col_L / 2), t.toY(h + stemH), col_L * t.scale, stemH * t.scale);
     ctx.fill(); ctx.stroke();
     ctx.restore();
+
+    const str = this.structResults;
+    if (str) this._drawSectionRebarIsolated(ctx, t, str, materials.cover_footing, L, h, col_L, stemH, ex);
 
     // Nivel de terreno / Df
     ctx.save();
@@ -314,6 +320,99 @@ export class FootingCanvasRenderer {
 
     this._dimLine(ctx, t.toX(-L / 2), t.toY(0), t.toX(L / 2), t.toY(0), `L = ${L.toFixed(2)} m`, 26);
     this._dimLine(ctx, t.toX(L / 2), t.toY(h), t.toX(L / 2), t.toY(0), `h = ${h.toFixed(2)} m`, 18, true);
+  }
+
+  /**
+   * Armadura en la vista de Sección (corte longitudinal a lo largo de L):
+   * la dirección que corre A LO LARGO de L se ve "de perfil" (una línea con
+   * ganchos de 90° en los extremos, apoyada en su capa correspondiente);
+   * la dirección perpendicular (a lo largo de B) se ve "de frente", como
+   * una fila de círculos espaciados a lo largo de L en la OTRA capa. La
+   * capa (inferior/superior) de cada una se toma de isLLong, igual criterio
+   * que footingSlabDesign.js (la dirección larga va en la capa inferior).
+   */
+  _drawSectionRebarIsolated(ctx, t, str, cover, L, h, col_L, stemH, ex = 0) {
+    const dbMain = str.dbMain;
+    const rMain = dbMain.diameter_m / 2;
+    const hook = hookMainBar_m(dbMain.diameter_m);
+    const longIsL = str.isLLong;
+
+    const yBottom = cover + rMain;
+    const yTop = yBottom + 2 * rMain;
+    const lineDepth = longIsL ? yBottom : yTop;
+    const dotDepth = longIsL ? yTop : yBottom;
+
+    // --- Esperas / arranque de columna: 2 barras visibles en este corte,
+    // desde la parrilla de la zapata hasta cerca de la corona del muñón,
+    // con gancho de 90° hacia el interior en la base ---
+    if (col_L && stemH) {
+      const dowelDepth = Math.max(lineDepth, dotDepth);
+      const yDowelBot = t.toY(dowelDepth);
+      const yDowelTop = t.toY(h + stemH - cover);
+      ctx.save();
+      ctx.strokeStyle = '#16a34a';
+      ctx.lineWidth = 1.8;
+      [1, -1].forEach((sign) => {
+        const dx = ex + sign * (col_L / 2 - cover);
+        const xPix = t.toX(dx);
+        ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix, yDowelTop); ctx.stroke();
+        const hookPxDowel = hook * t.scale * 0.5;
+        ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix - sign * hookPxDowel, yDowelBot); ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    // --- Barra(s) a lo largo de L: línea con ganchos de 90° hacia arriba ---
+    const runHalf = L / 2 - cover - rMain;
+    const x0 = t.toX(-runHalf), x1 = t.toX(runHalf);
+    const yLine = t.toY(lineDepth);
+    const hookPx = hook * t.scale;
+    ctx.save();
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x0, yLine); ctx.lineTo(x1, yLine); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x0, yLine); ctx.lineTo(x0, yLine - hookPx); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, yLine); ctx.lineTo(x1, yLine - hookPx); ctx.stroke();
+    ctx.restore();
+
+    // --- Barras a lo largo de B: círculos espaciados a lo largo de L ---
+    const dotPositions = [];
+    let lineSpacingLabel, dotSpacingLabel;
+    if (longIsL) {
+      lineSpacingLabel = `${str.L_dir.spacing} cm`;
+      const bandHalf = str.banding.bandWidth / 2;
+      const spBand = (str.banding.sp_band || 20) / 100;
+      for (let p = -bandHalf + spBand / 2; p <= bandHalf - spBand / 2 + 1e-6; p += spBand) dotPositions.push(p);
+      if (str.banding.sp_outer) {
+        const spOuter = str.banding.sp_outer / 100;
+        for (let p = bandHalf + spOuter / 2; p <= L / 2 - spOuter / 2 + 1e-6; p += spOuter) { dotPositions.push(p); dotPositions.push(-p); }
+      }
+      dotSpacingLabel = `${str.banding.sp_band} cm (banda central) / ${str.banding.sp_outer ?? '—'} cm (exterior)`;
+    } else {
+      dotSpacingLabel = `${str.B_dir.spacing} cm`;
+      const sp = (str.B_dir.spacing || 20) / 100;
+      const half = L / 2 - cover - rMain;
+      for (let p = -half + sp / 2; p <= half - sp / 2 + 1e-6; p += sp) dotPositions.push(p);
+      lineSpacingLabel = `${str.banding.sp_band} cm (banda central) / ${str.banding.sp_outer ?? '—'} cm (exterior)`;
+    }
+    const yDot = t.toY(dotDepth);
+    ctx.save();
+    ctx.fillStyle = '#dc2626';
+    ctx.strokeStyle = '#7f1d1d';
+    dotPositions.forEach((p) => {
+      ctx.beginPath();
+      ctx.arc(t.toX(p), yDot, Math.max(2.5, rMain * t.scale), 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    });
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillStyle = '#2563eb';
+    ctx.fillText(`Línea azul: Ø ${dbMain.inches} a lo largo de L @ ${lineSpacingLabel} (gancho 90° = ${(hook * 100).toFixed(0)} cm)`, 10, 18);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillText(`Círculos rojos: Ø ${dbMain.inches} a lo largo de B @ ${dotSpacingLabel}`, 10, 34);
+    ctx.restore();
   }
 
   drawIsolatedPressures(width, height) {
