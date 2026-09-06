@@ -37,6 +37,10 @@ import {
  * @param {number} p.fc_kgcm2, p.fy_kgcm2 - resistencias (kg/cm²)
  * @param {number} p.fc, p.fy - resistencias (MPa)
  * @param {number} p.cover - recubrimiento libre (m)
+ * @param {number} [p.dFlat] - peralte efectivo fijo (m), igual en ambas
+ *   direcciones, que reemplaza el cálculo por capas a partir de cover y
+ *   diámetro de barra (usado por zapata aislada: d = h − 0.10 m, misma
+ *   convención de la hoja de cálculo de referencia)
  * @param {object} p.dbMain - barra principal (de REBAR_TABLE)
  * @param {object} p.rebarTrans - barra de banda/temperatura (de REBAR_TABLE)
  */
@@ -51,8 +55,8 @@ export function designFootingSlab(p) {
   const qB = (y) => Pu / A + (12 * Mu_y * y) / (L * Math.pow(B, 3));
 
   const isLLong = L >= B;
-  const d_layer1 = h - cover - dbMain.diameter_m / 2.0;
-  const d_layer2 = h - cover - dbMain.diameter_m - dbMain.diameter_m / 2.0;
+  const d_layer1 = p.dFlat ?? (h - cover - dbMain.diameter_m / 2.0);
+  const d_layer2 = p.dFlat ?? (h - cover - dbMain.diameter_m - dbMain.diameter_m / 2.0);
   const d_L = isLLong ? d_layer1 : d_layer2;
   const d_B = isLLong ? d_layer2 : d_layer1;
 

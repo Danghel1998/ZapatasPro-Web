@@ -25,16 +25,16 @@ export function hookStirrup_m(diameter_mm, diameter_m) {
 }
 
 /**
- * Acero requerido por flexión para una franja de ancho b_m. Compara dos
- * mínimos independientes y toma el mayor (igual que la memoria de
- * referencia UNI, que los verifica como pasos separados):
- *   - Mínimo de viga/franja a flexión (ACI 318 9.6.1 / E.060 9.6): sobre el
- *     peralte EFECTIVO b·d — max(0.25√f'c/fy, 1.4/fy).
- *   - Mínimo de losa por retracción y temperatura (ACI 318 24.4 / E.060
- *     9.7, aplicable a zapatas por ser en esencia una losa): 0.0018 sobre
- *     el peralte TOTAL (bruto) b·h — requiere pasar `h_m`. Si no se pasa
- *     (p.ej. una viga de conexión, que no es una losa), solo rige el
- *     mínimo de viga.
+ * Acero requerido por flexión para una franja de ancho b_m. El acero
+ * mínimo depende del tipo de elemento:
+ *   - Losa/zapata (se pasa `h_m`, el peralte TOTAL bruto): ACI 318
+ *     7.6.1.1 / 8.6.1.1 remiten al mínimo de retracción y temperatura
+ *     (24.4.3.2) — 0.0018·b·h — NO al mínimo de viga (confirmado contra
+ *     la hoja de cálculo de referencia Efrén, que solo aplica este
+ *     mínimo). Aplicar el mínimo de viga aquí sobre-diseña el acero de
+ *     zapatas de forma significativa e incorrecta.
+ *   - Viga (no se pasa `h_m`, p.ej. una viga de conexión/strap beam): ACI
+ *     318 9.6.1.2 — max(0.25√f'c/fy, 1.4/fy) sobre el peralte EFECTIVO b·d.
  */
 export function calcRequiredRebar(Mu_kNm, fc_MPa, fy_MPa, b_m, d_m, phi = PHI_FLEX, h_m = null) {
   const Mu = Math.max(0.001, Mu_kNm);
@@ -55,21 +55,25 @@ export function calcRequiredRebar(Mu_kNm, fc_MPa, fy_MPa, b_m, d_m, phi = PHI_FL
     rho = 0.025; // sección insuficiente: se reporta una cuantía alta para que la verificación falle visiblemente
   }
 
-  const rho_min1 = (0.25 * Math.sqrt(fc_MPa)) / fy_MPa;
-  const rho_min2 = 1.4 / fy_MPa;
-  const rho_min = Math.max(rho_min1, rho_min2);
-
   const As_calc = rho * b_cm * d_cm;
-  const As_min_flex = rho_min * b_cm * d_cm;
-  const As_min_gross = h_m !== null ? 0.0018 * b_cm * (h_m * 100.0) : 0;
-  const As_min = Math.max(As_min_flex, As_min_gross);
+
+  let As_min, rho_min;
+  if (h_m !== null) {
+    As_min = 0.0018 * b_cm * (h_m * 100.0);
+    rho_min = As_min / (b_cm * d_cm);
+  } else {
+    const rho_min1 = (0.25 * Math.sqrt(fc_MPa)) / fy_MPa;
+    const rho_min2 = 1.4 / fy_MPa;
+    rho_min = Math.max(rho_min1, rho_min2);
+    As_min = rho_min * b_cm * d_cm;
+  }
 
   const As_design = Math.max(As_calc, As_min);
   const rho_design = As_design / (b_cm * d_cm);
 
   const a_cm = (As_design * (fy_MPa / 10.0)) / (0.85 * (fc_MPa / 10.0) * b_cm);
 
-  return { Mu_kNm, Rn, rho, rho_min, rho_design, a_cm, As_calc, As_min, As_min_flex, As_min_gross, As_design };
+  return { Mu_kNm, Rn, rho, rho_min, rho_design, a_cm, As_calc, As_min, As_design };
 }
 
 /** Espaciamiento comercial (redondeado hacia abajo a un valor constructivo estándar, en cm) que satisface el área de acero requerida por metro. */

@@ -449,22 +449,22 @@ export class AppUIController {
   }
 
   /**
-   * Predimensionamiento de zapata aislada — curso UNI "Concreto Armado 2"
-   * (cap. 2.1/2.2, ejemplo 2-1): área A ≥ 1.075(PCM+PCV)/(0.9·q_adm)
-   * (ec. 2-4, ver _iterateArea), y reparto del mismo volado "c" alrededor
-   * de la columna en ambas direcciones (L = 2c + col_L, B = 2c + col_B,
-   * ec. de la figura 2-2) para que L×B cubra esa área.
+   * Predimensionamiento de zapata aislada — hoja de cálculo de referencia
+   * (Efrén, "ZAPATA TIPO 1.xlsx"): área tentativa A = P(1+fz)/q_adm (sin
+   * iterar con el peso propio real — el factor "fz" ya lo aproxima), y
+   * reparto del mismo volado "c" alrededor de la columna en ambas
+   * direcciones (L = 2c + col_L, B = 2c + col_B) para que L×B cubra esa
+   * área.
    */
   predimensionIsolated() {
-    const { isolated, foundation, materials } = this.data;
+    const { isolated, foundation } = this.data;
     const P = (isolated.Pd || 0) + (isolated.Pl || 0);
     if (P <= 0) return;
-    const a = isolated.col_L, b = isolated.col_B;
-    const h = isolated.h || 0.5, Df = isolated.Df || 1.5;
-    const gamma_c_tnm3 = (materials.gamma_c_kgm3 || 2400) / 1000;
-    const gamma_s_tnm3 = (foundation.gamma_kgm3 || 1800) / 1000;
+    const fz = isolated.fz ?? 0.08;
+    const qAdmTnm2 = (foundation.q_adm_kgcm2 || 1) * 10;
+    const A_req = (P * (1 + fz)) / qAdmTnm2;
 
-    const { L, B } = this._iterateArea(P, h, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveCenteredLB(a, b, A));
+    const { L, B } = this._solveCenteredLB(isolated.col_L, isolated.col_B, A_req);
     isolated.L = Math.round(L * 100) / 100;
     isolated.B = Math.round(B * 100) / 100;
     this.syncFormWithData();
@@ -978,43 +978,31 @@ export class AppUIController {
 
   /**
    * Sección "II) PREDIMENSIONAMIENTO", al estilo de la hoja de cálculo de
-   * referencia: 1°) área tentativa por cargas de gravedad (A = 1.075·P /
-   * (0.9·q_adm), mismo método y volado "c" que usa el botón
-   * "Predimensionar" — ver predimensionIsolated) y 2°) verificación por
-   * gravedad + momento + sismo con el detalle de las 4 esquinas
-   * (distribución trapezoidal) y, cuando alguna esquina resulta en
-   * tracción, la distribución rectangular equivalente — mismos casos y
+   * referencia (Efrén — "ZAPATA TIPO 1.xlsx"): 1°) área tentativa por
+   * cargas de gravedad (A = P(1+fz)/q_adm, mismo método y volado "c" que
+   * usa el botón "Predimensionar" — ver predimensionIsolated) y 2°)
+   * verificación por gravedad + momento + sismo con el detalle de las 4
+   * esquinas (distribución trapezoidal) y, cuando alguna esquina resulta
+   * en tracción, la distribución rectangular equivalente — mismos casos y
    * valores ya calculados en geo.seismic_envelope (sección 2.1), solo que
    * aquí se muestra el desglose completo de las 4 esquinas en vez de
    * únicamente la más desfavorable.
    */
   _predimensionamientoIsoladaHtml(d, fnd, mat, geo) {
-    const gamma_c_tnm3 = (mat.gamma_c_kgm3 || 2400) / 1000;
-    const gamma_s_tnm3 = (fnd.gamma_kgm3 || 1800) / 1000;
-    const h = d.h || 0.5, Df = d.Df || 1.5;
     const a = d.col_L, b = d.col_B;
     const P = (d.Pd || 0) + (d.Pl || 0);
+    const fz = d.fz ?? 0.08;
     const qAdmTnm2 = (fnd.q_adm_kgcm2 || 1) * 10;
-    const qAdmEff = 0.9 * qAdmTnm2;
+    const A_req = (P * (1 + fz)) / qAdmTnm2;
 
-    let A_req = (P * 1.075) / qAdmEff;
-    let cRaw = 0;
-    for (let iter = 0; iter < 6; iter++) {
-      const disc = (a - b) * (a - b) + 4 * A_req;
-      cRaw = (-(a + b) + Math.sqrt(disc)) / 4;
-      const cRound = Math.max(0.05, Math.ceil(cRaw / 0.05) * 0.05);
-      const L = 2 * cRound + a, B = 2 * cRound + b;
-      const selfWeight = gamma_c_tnm3 * (L * B) * h + gamma_s_tnm3 * (L * B) * Math.max(0, Df - h);
-      const A_next = (P + selfWeight) / qAdmEff;
-      if (Math.abs(A_next - A_req) < 1e-6) { A_req = A_next; break; }
-      A_req = A_next;
-    }
+    const disc = (a - b) * (a - b) + 4 * A_req;
+    const cRaw = (-(a + b) + Math.sqrt(disc)) / 4;
     const cRound = Math.max(0.05, Math.ceil(cRaw / 0.05) * 0.05);
     const Lp = 2 * cRound + a, Bp = 2 * cRound + b;
 
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1°) Verificamos por cargas de gravedad</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Área tentativa: A = 1.075·P / (0.9·q_adm) — curso UNI "Concreto Armado 2", ec. 2-4. Volado "c" repartido por igual alrededor de la columna en ambas direcciones (L = 2c + b, B = 2c + t), refinado iterando con el peso propio real.</p>
+      <p class="text-[11px] text-slate-500 mb-2">Área tentativa: A = P(1+fz) / q_adm, con fz = ${fz.toFixed(2)} como aproximación del peso propio. Volado "c" repartido por igual alrededor de la columna en ambas direcciones (L = 2c + b, B = 2c + t).</p>
       <table class="text-xs w-full mb-2">
         ${this._specRow('Carga en servicio (P = CM+CV)', `${this._trimNum(P)} Ton`)}
         ${this._specRow('Área tentativa (A)', `${A_req.toFixed(2)} m²`)}
@@ -1025,27 +1013,21 @@ export class AppUIController {
 
     let step2Html = '';
     if (geo.hasSeismic && geo.seismic_envelope) {
-      const factor = d.seismic_bearing_factor || 1.3;
+      const factor = d.seismic_bearing_factor || 1.25;
       const rows = geo.seismic_envelope.rows;
-      const Pgrav = geo.N_tn;
+      const Pgrav = P;
       const MxGrav = (d.Mx_d || 0) + (d.Mx_l || 0);
       const MyGrav = (d.My_d || 0) + (d.My_l || 0);
       const seisOf = (label) => {
-        if (label.includes('sismo)')) return [0, 0, 0];
-        if (label.includes('X')) return [d.Psx || 0, d.Mx_sx || 0, d.My_sx || 0];
+        if (label === 'CM+CV') return [0, 0, 0];
+        if (label.includes('SXD')) return [d.Psx || 0, d.Mx_sx || 0, d.My_sx || 0];
         return [d.Psy || 0, d.Mx_sy || 0, d.My_sy || 0];
       };
-      const rowLabel = (label) => label
-        .replace('σ1 (sin sismo)', 'CM+CV')
-        .replace('σ2 (sismo +X)', 'CM+CV+SXD')
-        .replace('σ2 (sismo −X)', 'CM+CV−SXD')
-        .replace('σ3 (sismo +Y)', 'CM+CV+SYD')
-        .replace('σ3 (sismo −Y)', 'CM+CV−SYD');
 
       const loadsRows = rows.map((r) => {
         const [Ps, Mxs, Mys] = seisOf(r.label);
         return `<tr class="odd:bg-sky-50">
-          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${rowLabel(r.label)}</td>
+          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Pgrav)}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(MxGrav)}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(MyGrav)}</td>
@@ -1060,7 +1042,7 @@ export class AppUIController {
         const sx = r.rect ? `${kpaToKgcm2(r.rect.qx).toFixed(2)}` : '—';
         const sy = r.rect ? `${kpaToKgcm2(r.rect.qy).toFixed(2)}` : '—';
         return `<tr class="odd:bg-sky-50">
-          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${rowLabel(r.label)}</td>
+          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s1.toFixed(2)}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s2.toFixed(2)}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s3.toFixed(2)}</td>
@@ -1073,7 +1055,7 @@ export class AppUIController {
 
       step2Html = `
         <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2°) Verificamos por cargas de gravedad más momento y sismo</h4>
-        <p class="text-[11px] text-slate-500 mb-2">σadm = ${this._p(fnd.q_adm_kgcm2)} &nbsp; σadm(sismo) = ${this._p(fnd.q_adm_kgcm2 * factor)} (factor × ${factor.toFixed(2)}). σ = P/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata; si alguna resulta en tracción, se usa la distribución rectangular equivalente σx, σy.</p>
+        <p class="text-[11px] text-slate-500 mb-2">σadm = ${this._p(fnd.q_adm_kgcm2)} &nbsp; σadm(sismo) = ${this._p(fnd.q_adm_kgcm2 * factor)} (factor × ${factor.toFixed(2)}). σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata; si alguna resulta en tracción, se usa la distribución rectangular equivalente σx, σy.</p>
         <div class="overflow-x-auto">
         <table class="text-xs w-full border-collapse mb-2">
           <thead><tr>
@@ -1130,7 +1112,7 @@ export class AppUIController {
     html += this._predimensionamientoIsoladaHtml(d, fnd, mat, geo);
 
     html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
-    html += `<p class="text-xs text-slate-600 mb-2">Peso propio de la zapata: ${geo.W_footing_tn.toFixed(2)} tn. Peso del relleno sobre la zapata: ${geo.W_soil_tn.toFixed(2)} tn. Carga total transmitida al suelo N = ${geo.N_tn.toFixed(2)} tn.</p>`;
+    html += `<p class="text-xs text-slate-600 mb-2">Peso propio estimado con el factor fz = ${geo.fz.toFixed(2)} (N = P·(1+fz)): ${geo.selfWeight_equiv_tn.toFixed(2)} tn. Carga total transmitida al suelo N = ${geo.N_tn.toFixed(2)} tn.</p>`;
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
       ['Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ex) <= geo.ex_max)],
       ['Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ey) <= geo.ey_max)],
@@ -1140,7 +1122,7 @@ export class AppUIController {
 
     if (geo.hasSeismic) {
       html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">2.1 Envolvente Sísmica (Cargas de Servicio)</h3>`;
-      html += `<p class="text-xs text-slate-600 mb-2">Método del curso UNI "Concreto Armado 2" (cap. 2.3, ec. 2-5 a 2-7): σ = P/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para σ1 (sin sismo), σ2 (sismo en X) y σ3 (sismo en Y) — cada una en ambos sentidos ±, ya que el sismo puede actuar en cualquier dirección. σ1 se limita a q_adm; σ2 y σ3, a ${(fnd.seismic_bearing_factor ?? 1.3).toFixed(2)}·q_adm.</p>`;
+      html += `<p class="text-xs text-slate-600 mb-2">σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para CM+CV, CM+CV±SXD y CM+CV±SYD. CM+CV se limita a q_adm; las combinaciones con sismo, a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm.</p>`;
       html += this._table(['Combinación', 'q (esquina más desfavorable)', 'Límite admisible', 'Estado'], geo.seismic_envelope.rows.map((r) => [
         r.label,
         `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,
@@ -1150,22 +1132,18 @@ export class AppUIController {
       html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${this._p(geo.seismic_envelope.governing_q_kgcm2)}.</p>`;
     }
 
-    if (str.hasSeismic) {
-      html += this._sectionTitle('3. Envolvente Sísmica (Cargas Factoradas)');
-      html += `<p class="text-xs text-slate-600 mb-2">Mismas presiones de servicio σ1/σ2/σ3 de la sección 2.1, amplificadas cada una por un solo factor — σult1 = 1.55·σ1, σult2 = 1.25·σ2, σult3 = 1.25·σ3 (ec. 2-8 a 2-10 del curso) — una simplificación de la combinación completa de cargas factoradas. La más desfavorable se toma como presión de diseño "su", aplicada de forma <b>uniforme</b> sobre toda la zapata para el diseño por punzonamiento, corte y flexión.</p>`;
-      html += this._table(['Combinación', 'σ (servicio, esquina más desfavorable)', 'Factor', 'σult (diseño)'], str.envelope.rows.map((r) => [
+    {
+      html += this._sectionTitle(`3. Combinaciones de Diseño (Cargas Factoradas)`);
+      html += `<p class="text-xs text-slate-600 mb-2">Combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — aplicadas sobre la presión de contacto en las 4 esquinas de la zapata (con el peso propio aproximado por fz). La más desfavorable se toma como presión de diseño "su", aplicada de forma <b>uniforme</b> sobre toda la zapata para el diseño por punzonamiento, corte y flexión.</p>`;
+      html += this._table(['Combinación', 'σ (esquina más desfavorable)'], str.envelope.rows.map((r) => [
         r.label,
         `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,
-        `× ${r.amp.toFixed(2)}`,
-        this._p(r.su_kgcm2),
       ]));
       html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${str.envelope.governingRow.label}</b>. su = ${this._p(str.envelope.su_kgcm2, 3)} (presión de diseño uniforme).</p>`;
       html += this._slabReportHtml(str, d.L, d.B, 4);
-    } else {
-      html += this._slabReportHtml(str, d.L, d.B, 3);
     }
 
-    html += this._sectionTitle(`${str.hasSeismic ? 5 : 4}. Cuadro de Habilitación de Acero`);
+    html += this._sectionTitle('5. Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
 
     return html;

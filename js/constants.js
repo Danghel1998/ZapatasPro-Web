@@ -49,10 +49,15 @@ export const DEFAULT_FOOTING_DATA = {
     Psx: 0.0, Mx_sx: 0.0, My_sx: 0.0,
     Psy: 0.0, Mx_sy: 0.0, My_sy: 0.0,
     // Incremento admisible en la capacidad portante para combinaciones
-    // que incluyen sismo (E.030) — 1.30 según el curso UNI "Concreto
-    // Armado 2" (cap. 2.3); la hoja de cálculo de referencia usa 1.25.
-    // Queda configurable.
-    seismic_bearing_factor: 1.3,
+    // que incluyen sismo (E.030) — 1.25 según la hoja de cálculo de
+    // referencia (Efrén, "ZAPATA TIPO 1.xlsx"). Queda configurable.
+    seismic_bearing_factor: 1.25,
+    // Factor de peso propio estimado ("fz" de la hoja de referencia):
+    // sustituye el cálculo del peso propio real de la zapata + relleno —
+    // la carga axial de gravedad se infla por (1+fz) tanto en el
+    // predimensionamiento (A = P(1+fz)/q_adm) como en la envolvente de
+    // presiones de contacto. Queda configurable.
+    fz: 0.08,
     // Tipo de columna (afecta αs en punzonamiento: 40 interior, 30
     // medianera/borde, 20 esquinera — E.060 / ACI 318).
     col_type: 'interior',
@@ -151,8 +156,8 @@ export const PRESET_PROJECTS = {
     })()
   },
   zapata_aislada_sismo: {
-    title: 'Zapata Aislada Interior con Sismo (envolvente σ1/σ2/σ3)',
-    desc: 'Columna interior 0.35×0.25 m con cargas de gravedad y sismo en X e Y (caso de referencia de una hoja de cálculo real de diseño estructural).',
+    title: 'Zapata Aislada Interior con Sismo (9 combinaciones)',
+    desc: 'Columna interior 0.35×0.25 m con cargas de gravedad y sismo en X e Y.',
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'aislada';
@@ -167,6 +172,28 @@ export const PRESET_PROJECTS = {
       d.isolated.col_type = 'interior';
       d.foundation.gamma_kgm3 = 1900.0;
       d.foundation.q_adm_kgcm2 = 1.0;
+      return d;
+    })()
+  },
+  zapata_aislada_efren: {
+    title: 'Zapata Aislada Interior — Caso de Verificación (Efrén)',
+    desc: 'Columna interior 0.30×0.30 m, h=0.60 m, con cargas de gravedad y sismo en X e Y — reproduce exactamente la hoja de cálculo real de referencia "ZAPATA TIPO 1.xlsx" (fz=0.08, factor sismo=1.25) para verificar que el programa da los mismos resultados.',
+    data: (() => {
+      const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
+      d.footing_type = 'aislada';
+      d.isolated.L = 2.10; d.isolated.B = 2.10; d.isolated.h = 0.60;
+      d.isolated.col_L = 0.30; d.isolated.col_B = 0.30;
+      d.isolated.Df = 1.60;
+      d.isolated.Pd = 16.65; d.isolated.Pl = 28.85;
+      d.isolated.Mx_d = 0.1971; d.isolated.Mx_l = 0.0447;
+      d.isolated.My_d = 0.1592; d.isolated.My_l = 0.0381;
+      d.isolated.Psx = 0.4187; d.isolated.Mx_sx = 0.0; d.isolated.My_sx = 0.1267;
+      d.isolated.Psy = 0.4196; d.isolated.Mx_sy = 0.1037; d.isolated.My_sy = 0.0;
+      d.isolated.col_type = 'interior';
+      d.isolated.fz = 0.08;
+      d.isolated.seismic_bearing_factor = 1.25;
+      d.foundation.gamma_kgm3 = 1800.0;
+      d.foundation.q_adm_kgcm2 = 1.2;
       return d;
     })()
   },
