@@ -542,6 +542,19 @@ html.dark .eng-cell-yellow-wrapper .eng-unit-badge {
 html.dark .eng-cell-yellow-wrapper .eng-cell-input {
   color: #fef08a !important;
 }
+html.dark .eng-raw-input {
+  background-color: #0f172a;
+  border-color: #475569 !important;
+  color: #f1f5f9;
+}
+html.dark .eng-raw-input::placeholder {
+  color: #64748b;
+}
+html.dark .eng-raw-input:focus {
+  background-color: #1e293b;
+  border-color: #818cf8 !important;
+  outline: none;
+}
 
 html.dark .bg-white,
 html.dark .bg-white\/90 {
