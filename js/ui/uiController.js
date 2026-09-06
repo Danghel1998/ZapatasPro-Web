@@ -891,6 +891,76 @@ export class AppUIController {
     return `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">${panels.join('')}</div>`;
   }
 
+  /** Fila "etiqueta = valor" para los mini-cuadros de especificaciones. */
+  _specRow(label, val) {
+    return `<tr><td class="py-0.5 pr-3 text-slate-600 whitespace-nowrap">${label} =</td><td class="py-0.5 text-right font-mono font-semibold text-slate-800">${val}</td></tr>`;
+  }
+
+  /** Redondea a 4 decimales y recorta ceros sobrantes (0.5000 → 0.5, 0 → 0). */
+  _trimNum(n) {
+    return n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  /**
+   * Sección "I) DATOS DE DISEÑO" al estilo de una hoja de cálculo real de
+   * referencia: especificaciones del proyecto y sección de columna a la
+   * izquierda, cuadro de cargas en servicio (CM/CV/SXD/SYD × P/Mx/My) a la
+   * derecha — con SXD/SYD solo si el proyecto tiene datos de sismo.
+   */
+  _datosDisenoIsoladaHtml(d, fnd, mat, hasSeismic) {
+    const specsHtml = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Especificaciones del proyecto</h4>
+      <table class="text-xs w-full mb-3">
+        ${this._specRow(`f'c`, `${mat.fc_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('fy', `${mat.fy_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('Prof. Cim.', `${d.Df.toFixed(2)} m`)}
+        ${this._specRow('q_adm', this._p(fnd.q_adm_kgcm2))}
+        ${this._specRow('γs', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`)}
+      </table>
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Sección de Columna</h4>
+      <table class="text-xs w-full mb-3">
+        ${this._specRow('b', `${d.col_L.toFixed(2)} m`)}
+        ${this._specRow('t', `${d.col_B.toFixed(2)} m`)}
+      </table>
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Geometría de la Zapata</h4>
+      <table class="text-xs w-full">
+        ${this._specRow('L', `${d.L.toFixed(2)} m`)}
+        ${this._specRow('B', `${d.B.toFixed(2)} m`)}
+        ${this._specRow('h', `${d.h.toFixed(2)} m`)}
+      </table>`;
+
+    const loadRow = (label, P, Mx, My) => `<tr class="odd:bg-sky-50">
+      <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${label}</td>
+      <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(P)}</td>
+      <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mx)}</td>
+      <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(My)}</td>
+    </tr>`;
+    const loadsHtml = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Cargas en servicio</h4>
+      <table class="text-xs w-full border-collapse">
+        <thead><tr>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100"></th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">P (Ton)</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Mx (Ton-m)</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">My (Ton-m)</th>
+        </tr></thead>
+        <tbody>
+          ${loadRow('CM', d.Pd, d.Mx_d, d.My_d)}
+          ${loadRow('CV', d.Pl, d.Mx_l, d.My_l)}
+          ${hasSeismic ? loadRow('SXD', d.Psx, d.Mx_sx, d.My_sx) : ''}
+          ${hasSeismic ? loadRow('SYD', d.Psy, d.Mx_sy, d.My_sy) : ''}
+        </tbody>
+      </table>`;
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">I) DATOS DE DISEÑO</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-3">
+        <div>${specsHtml}</div>
+        <div>${loadsHtml}</div>
+      </div>
+    </div>`;
+  }
+
   _reportIsolated() {
     const d = this.data.isolated, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
@@ -899,23 +969,7 @@ export class AppUIController {
     html += this._cajetinBlockHtml();
     html += this._visualizerImagesHtml();
 
-    html += this._sectionTitle('1. Datos de Entrada');
-    html += this._table(['Parámetro', 'Valor'], [
-      ['Dimensiones en planta (L × B)', `${d.L.toFixed(2)} × ${d.B.toFixed(2)} m`],
-      ['Peralte total (h)', `${d.h.toFixed(2)} m`],
-      ['Columna (col_L × col_B)', `${d.col_L.toFixed(2)} × ${d.col_B.toFixed(2)} m`],
-      ['Profundidad de desplante (Df)', `${d.Df.toFixed(2)} m`],
-      ['Carga de servicio — muerta / viva', `${d.Pd.toFixed(1)} / ${d.Pl.toFixed(1)} tn`],
-      ['Momento de servicio Mx (D/L)', `${d.Mx_d.toFixed(1)} / ${d.Mx_l.toFixed(1)} tn·m`],
-      ['Momento de servicio My (D/L)', `${d.My_d.toFixed(1)} / ${d.My_l.toFixed(1)} tn·m`],
-      ...(geo.hasSeismic ? [
-        ['Sismo X — P / Mx / My (servicio)', `${d.Psx.toFixed(2)} tn / ${d.Mx_sx.toFixed(2)} / ${d.My_sx.toFixed(2)} tn·m`],
-        ['Sismo Y — P / Mx / My (servicio)', `${d.Psy.toFixed(2)} tn / ${d.Mx_sy.toFixed(2)} / ${d.My_sy.toFixed(2)} tn·m`],
-      ] : []),
-      ['Peso específico del suelo (γs)', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`],
-      ['Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2)],
-      [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
-    ]);
+    html += this._datosDisenoIsoladaHtml(d, fnd, mat, geo.hasSeismic);
 
     html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
     html += `<p class="text-xs text-slate-600 mb-2">Peso propio de la zapata: ${geo.W_footing_tn.toFixed(2)} tn. Peso del relleno sobre la zapata: ${geo.W_soil_tn.toFixed(2)} tn. Carga total transmitida al suelo N = ${geo.N_tn.toFixed(2)} tn.</p>`;
