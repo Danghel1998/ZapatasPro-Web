@@ -893,7 +893,7 @@ export class AppUIController {
 
   /** Fila "etiqueta = valor" para los mini-cuadros de especificaciones. */
   _specRow(label, val) {
-    return `<tr><td class="py-0.5 pr-3 text-slate-600 whitespace-nowrap">${label} =</td><td class="py-0.5 text-right font-mono font-semibold text-slate-800">${val}</td></tr>`;
+    return `<tr><td class="py-0.5 pr-3 text-slate-600">${label} =</td><td class="py-0.5 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">${val}</td></tr>`;
   }
 
   /** Redondea a 4 decimales y recorta ceros sobrantes (0.5000 → 0.5, 0 → 0). */
@@ -911,22 +911,22 @@ export class AppUIController {
     const specsHtml = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">Especificaciones del proyecto</h4>
       <table class="text-xs w-full mb-3">
-        ${this._specRow(`f'c`, `${mat.fc_kgcm2.toFixed(0)} kg/cm²`)}
-        ${this._specRow('fy', `${mat.fy_kgcm2.toFixed(0)} kg/cm²`)}
-        ${this._specRow('Prof. Cim.', `${d.Df.toFixed(2)} m`)}
-        ${this._specRow('q_adm', this._p(fnd.q_adm_kgcm2))}
-        ${this._specRow('γs', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`)}
+        ${this._specRow(`Resistencia del concreto (f'c)`, `${mat.fc_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('Resistencia del acero (fy)', `${mat.fy_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('Prof. de desplante (Df)', `${d.Df.toFixed(2)} m`)}
+        ${this._specRow('Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2))}
+        ${this._specRow('Peso específico del suelo (γs)', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`)}
       </table>
       <h4 class="text-xs font-bold text-slate-700 mb-1">Sección de Columna</h4>
       <table class="text-xs w-full mb-3">
-        ${this._specRow('b', `${d.col_L.toFixed(2)} m`)}
-        ${this._specRow('t', `${d.col_B.toFixed(2)} m`)}
+        ${this._specRow('Ancho de columna (b)', `${d.col_L.toFixed(2)} m`)}
+        ${this._specRow('Peralte de columna (t)', `${d.col_B.toFixed(2)} m`)}
       </table>
       <h4 class="text-xs font-bold text-slate-700 mb-1">Geometría de la Zapata</h4>
       <table class="text-xs w-full">
-        ${this._specRow('L', `${d.L.toFixed(2)} m`)}
-        ${this._specRow('B', `${d.B.toFixed(2)} m`)}
-        ${this._specRow('h', `${d.h.toFixed(2)} m`)}
+        ${this._specRow('Largo de zapata (L)', `${d.L.toFixed(2)} m`)}
+        ${this._specRow('Ancho de zapata (B)', `${d.B.toFixed(2)} m`)}
+        ${this._specRow('Peralte total (h)', `${d.h.toFixed(2)} m`)}
       </table>`;
 
     const loadRow = (label, P, Mx, My) => `<tr class="odd:bg-sky-50">
@@ -950,7 +950,14 @@ export class AppUIController {
           ${hasSeismic ? loadRow('SXD', d.Psx, d.Mx_sx, d.My_sx) : ''}
           ${hasSeismic ? loadRow('SYD', d.Psy, d.Mx_sy, d.My_sy) : ''}
         </tbody>
-      </table>`;
+      </table>
+      <p class="text-[10px] text-slate-500 mt-1 leading-snug">
+        <span class="font-semibold">CM</span>: Carga Muerta ·
+        <span class="font-semibold">CV</span>: Carga Viva
+        ${hasSeismic ? ` · <span class="font-semibold">SXD</span>: Sismo en dirección X · <span class="font-semibold">SYD</span>: Sismo en dirección Y` : ''} ·
+        <span class="font-semibold">P</span>: carga axial ·
+        <span class="font-semibold">Mx, My</span>: momentos flectores en X e Y
+      </p>`;
 
     return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
       <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">I) DATOS DE DISEÑO</div>
