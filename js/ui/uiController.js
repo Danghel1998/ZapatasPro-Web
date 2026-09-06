@@ -275,6 +275,128 @@ export class AppUIController {
 
     const predimAisladaBtn = document.getElementById('btn-predim-aislada');
     if (predimAisladaBtn) predimAisladaBtn.addEventListener('click', () => this.predimensionIsolated());
+
+    const predimCombinadaBtn = document.getElementById('btn-predim-combinada');
+    if (predimCombinadaBtn) predimCombinadaBtn.addEventListener('click', () => this.predimensionCombined());
+
+    const predimConectadaBtn = document.getElementById('btn-predim-conectada');
+    if (predimConectadaBtn) predimConectadaBtn.addEventListener('click', () => this.predimensionConnected());
+  }
+
+  /** Área requerida (m²) por peso propio real, iterando hasta converger:
+   * primera estimación con 10% de P para arrancar sin conocer la geometría,
+   * luego con el peso propio (zapata + relleno) de la geometría resultante
+   * en cada vuelta — ver predimensionIsolated() para la razón de iterar. */
+  _iterateArea(P_tn, h, Df, gamma_c_tnm3, gamma_s_tnm3, solveLB) {
+    let A_req = (P_tn * 1.10) / this._qAdmTnm2();
+    let L, B;
+    for (let iter = 0; iter < 6; iter++) {
+      ({ L, B } = solveLB(A_req));
+      const selfWeight = gamma_c_tnm3 * (L * B) * h + gamma_s_tnm3 * (L * B) * Math.max(0, Df - h);
+      const A_next = (P_tn + selfWeight) / this._qAdmTnm2();
+      if (Math.abs(A_next - A_req) < 1e-6) { A_req = A_next; break; }
+      A_req = A_next;
+    }
+    return { L, B };
+  }
+
+  _qAdmTnm2() {
+    return (this.data.foundation.q_adm_kgcm2 || 1) * 10;
+  }
+
+  /** L=2c+a, B=2c+b (proyección "c" simétrica en ambas direcciones) —
+   * proporcionamiento clásico de zapata interior/concéntrica. */
+  _solveCenteredLB(a, b, A_req) {
+    const disc = (a - b) * (a - b) + 4 * A_req;
+    const c = Math.max(0.05, Math.ceil(((-(a + b) + Math.sqrt(disc)) / 4) / 0.05) * 0.05);
+    return {
+      L: Math.ceil((2 * c + a) / 0.05) * 0.05,
+      B: Math.ceil((2 * c + b) / 0.05) * 0.05,
+    };
+  }
+
+  /** L=c+a, B=2c+b (proyección "c" hacia un solo lado en L — borde de
+   * propiedad, sin volado hacia afuera — y simétrica en B). */
+  _solveEdgeLB(a, b, A_req) {
+    const disc = (2 * a + b) * (2 * a + b) - 8 * (a * b - A_req);
+    const c = Math.max(0.05, Math.ceil(((-(2 * a + b) + Math.sqrt(disc)) / 4) / 0.05) * 0.05);
+    return {
+      L: Math.ceil((c + a) / 0.05) * 0.05,
+      B: Math.ceil((2 * c + b) / 0.05) * 0.05,
+    };
+  }
+
+  /**
+   * Predimensionamiento de zapata combinada: L se fija para que el
+   * centroide de la zapata coincida con la resultante de cargas de
+   * servicio (excentricidad nula, e=0 en calculateCombinedBearing), dados
+   * a1 y s; B se resuelve por área requerida, iterando con el peso propio
+   * real. Mismo criterio de la hoja de cálculo/curso UNI para el
+   * dimensionamiento de zapatas combinadas.
+   */
+  predimensionCombined() {
+    const { combined, foundation, materials } = this.data;
+    const P1 = (combined.P1d || 0) + (combined.P1l || 0);
+    const P2 = (combined.P2d || 0) + (combined.P2l || 0);
+    if (P1 + P2 <= 0) return;
+    const gamma_c_tnm3 = (materials.gamma_c_kgm3 || 2400) / 1000;
+    const gamma_s_tnm3 = (foundation.gamma_kgm3 || 1800) / 1000;
+    const h = combined.h || 0.5, Df = combined.Df || 1.5;
+
+    const x_R = combined.a1 + (P2 * combined.s) / (P1 + P2);
+    const L = Math.ceil((2 * x_R) / 0.05) * 0.05;
+    const { B } = this._iterateArea(P1 + P2, h, Df, gamma_c_tnm3, gamma_s_tnm3, (A_req) => ({ L, B: Math.ceil((A_req / L) / 0.05) * 0.05 }));
+
+    combined.L = Math.round(L * 100) / 100;
+    combined.B = Math.round(B * 100) / 100;
+    this.syncFormWithData();
+    this.recalculateAndRender();
+  }
+
+  /**
+   * Predimensionamiento de zapata conectada: dimensiona ambas zapatas a la
+   * vez, iterando el método de la viga rígida (mismo cálculo de N1/N2 que
+   * calculateConnectedBearing). Primera pasada con P1/P2 solos (sin la
+   * interacción de la viga) para tener un L1 inicial con el que calcular
+   * e1; luego, en cada vuelta, se recalculan N1/N2 con el e1 vigente y se
+   * redimensiona cada zapata con su reacción real, hasta converger.
+   */
+  predimensionConnected() {
+    const { connected, foundation, materials } = this.data;
+    const P1 = (connected.P1d || 0) + (connected.P1l || 0);
+    const P2 = (connected.P2d || 0) + (connected.P2l || 0);
+    const M1 = (connected.M1_d || 0) + (connected.M1_l || 0);
+    const M2 = (connected.M2_d || 0) + (connected.M2_l || 0);
+    const s = connected.s;
+    if (P1 <= 0 || P2 <= 0) return;
+    const gamma_c_tnm3 = (materials.gamma_c_kgm3 || 2400) / 1000;
+    const gamma_s_tnm3 = (foundation.gamma_kgm3 || 1800) / 1000;
+    const { col1_L, col1_B, col2_L, col2_B } = connected;
+    const h1 = connected.h1 || 0.5, h2 = connected.h2 || 0.5, Df = connected.Df || 1.5;
+
+    let sz1 = this._iterateArea(P1, h1, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveEdgeLB(col1_L, col1_B, A));
+    let sz2 = this._iterateArea(P2, h2, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveCenteredLB(col2_L, col2_B, A));
+
+    for (let outer = 0; outer < 8; outer++) {
+      const e1 = sz1.L / 2 - col1_L / 2;
+      if (s - e1 <= 0.01) break; // geometría inválida (e1 muy cerca de s) — no seguir iterando
+      const N2 = P2 - (P1 * e1) / (s - e1) + (M1 + M2) / (s - e1);
+      const N1 = P1 + P2 - N2;
+      if (N2 <= 0 || N1 <= 0) break; // reacción negativa: el método de viga rígida no aplica, se deja la última geometría válida
+      const newSz1 = this._iterateArea(N1, h1, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveEdgeLB(col1_L, col1_B, A));
+      const newSz2 = this._iterateArea(N2, h2, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveCenteredLB(col2_L, col2_B, A));
+      const converged = Math.abs(newSz1.L - sz1.L) < 0.01 && Math.abs(newSz1.B - sz1.B) < 0.01
+        && Math.abs(newSz2.L - sz2.L) < 0.01 && Math.abs(newSz2.B - sz2.B) < 0.01;
+      sz1 = newSz1; sz2 = newSz2;
+      if (converged) break;
+    }
+
+    connected.L1 = Math.round(sz1.L * 100) / 100;
+    connected.B1 = Math.round(sz1.B * 100) / 100;
+    connected.L2 = Math.round(sz2.L * 100) / 100;
+    connected.B2 = Math.round(sz2.B * 100) / 100;
+    this.syncFormWithData();
+    this.recalculateAndRender();
   }
 
   /**
@@ -292,25 +414,13 @@ export class AppUIController {
   predimensionIsolated() {
     const { isolated, foundation, materials } = this.data;
     const P = (isolated.Pd || 0) + (isolated.Pl || 0);
-    const q_adm_tnm2 = (foundation.q_adm_kgcm2 || 1) * 10;
-    if (P <= 0 || q_adm_tnm2 <= 0) return;
+    if (P <= 0) return;
     const a = isolated.col_L, b = isolated.col_B;
     const h = isolated.h || 0.5, Df = isolated.Df || 1.5;
     const gamma_c_tnm3 = (materials.gamma_c_kgm3 || 2400) / 1000;
     const gamma_s_tnm3 = (foundation.gamma_kgm3 || 1800) / 1000;
 
-    let A_req = (P * 1.10) / q_adm_tnm2;
-    let L, B;
-    for (let iter = 0; iter < 6; iter++) {
-      const disc = (a - b) * (a - b) + 4 * A_req;
-      const c = Math.max(0.05, Math.ceil(((-(a + b) + Math.sqrt(disc)) / 4) / 0.05) * 0.05);
-      L = Math.ceil((2 * c + a) / 0.05) * 0.05;
-      B = Math.ceil((2 * c + b) / 0.05) * 0.05;
-      const selfWeight = gamma_c_tnm3 * (L * B) * h + gamma_s_tnm3 * (L * B) * Math.max(0, Df - h);
-      const A_req_next = (P + selfWeight) / q_adm_tnm2;
-      if (Math.abs(A_req_next - A_req) < 1e-6) { A_req = A_req_next; break; }
-      A_req = A_req_next;
-    }
+    const { L, B } = this._iterateArea(P, h, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveCenteredLB(a, b, A));
     isolated.L = Math.round(L * 100) / 100;
     isolated.B = Math.round(B * 100) / 100;
     this.syncFormWithData();

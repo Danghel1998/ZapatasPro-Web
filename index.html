@@ -206,6 +206,8 @@
                   <div class="flex gap-1"><input type="number" step="0.05" class="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col2_L">
                   <input type="number" step="0.05" class="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col2_B"></div></div>
               </div>
+              <button id="btn-predim-combinada" type="button" class="w-full mt-1 px-2 py-1.5 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[11px] font-semibold transition">📐 Predimensionar L y B a partir del área requerida</button>
+              <p class="text-[10px] text-slate-500">Calcula L para que el centroide de la zapata coincida con la resultante de cargas (excentricidad nula bajo cargas de servicio, dados a1 y s), y B por área requerida A = (P1+P2+peso propio)/q_adm — itera con el peso propio real de la geometría resultante.</p>
             </div>
           </div>
 
@@ -256,6 +258,8 @@
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="connected.M1_d"></div>
                   <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.5" class="eng-cell-input" data-bind="connected.M1_l"><span class="eng-unit-badge">tn·m</span></div>
                 </div></div>
+              <button id="btn-predim-conectada" type="button" class="w-full mt-1 px-2 py-1.5 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[11px] font-semibold transition">📐 Predimensionar Zapata 1 y Zapata 2</button>
+              <p class="text-[10px] text-slate-500">Dimensiona ambas zapatas a la vez, iterando el método de la viga rígida: la Zapata 1 solo crece hacia el interior (proyección "c" en un solo lado en L, simétrica en B) y la Zapata 2 se proporciona igual que una zapata aislada — usando en cada iteración las reacciones N1/N2 reales (no P1/P2) hasta converger.</p>
             </div>
           </div>
 
