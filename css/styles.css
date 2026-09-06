@@ -491,9 +491,20 @@ code, pre, .font-mono {
    importar el tema.
    ========================================================================= */
 
+html.dark {
+  color-scheme: dark;
+}
+
 html.dark body {
   background-color: #0f172a;
   color: #e2e8f0;
+}
+
+/* La Memoria de Cálculo se queda siempre con fondo blanco (imprimible) —
+   sin esta regla, el texto heredaba el gris claro de html.dark body y
+   quedaba casi invisible sobre ese fondo blanco. */
+html.dark #report_panel {
+  color: #1e293b;
 }
 
 html.dark .eng-card {
