@@ -9,7 +9,7 @@ import { calculateIsolatedStructural, deriveColumnEccentricity } from '../engine
 import { calculateCombinedStructural } from '../engine/combinedFooting.js';
 import { calculateConnectedStructural } from '../engine/connectedFooting.js';
 import { calculateIsolatedRebarSchedule, calculateCombinedRebarSchedule, calculateConnectedRebarSchedule } from '../engine/rebarSchedule.js';
-import { knToKg, kNmToKgm } from '../engine/units.js';
+import { knToKg, kNmToKgm, kpaToKgcm2 } from '../engine/units.js';
 import { FootingCanvasRenderer } from '../visualizer/footingCanvas.js';
 import { FootingRenderer3D } from '../visualizer/footingRenderer3D.js';
 
@@ -968,6 +968,156 @@ export class AppUIController {
     </div>`;
   }
 
+  /** Celda "CUMPLE"/"NO CUMPLE" en texto (sin relleno de color), para
+   * reemplazar los recuadros de color de la hoja de cálculo de referencia. */
+  _estadoCell(pass) {
+    return pass
+      ? `<span class="text-emerald-700 font-bold">CUMPLE</span>`
+      : `<span class="text-red-700 font-bold">NO CUMPLE</span>`;
+  }
+
+  /**
+   * Sección "II) PREDIMENSIONAMIENTO", al estilo de la hoja de cálculo de
+   * referencia: 1°) área tentativa por cargas de gravedad (A = 1.075·P /
+   * (0.9·q_adm), mismo método y volado "c" que usa el botón
+   * "Predimensionar" — ver predimensionIsolated) y 2°) verificación por
+   * gravedad + momento + sismo con el detalle de las 4 esquinas
+   * (distribución trapezoidal) y, cuando alguna esquina resulta en
+   * tracción, la distribución rectangular equivalente — mismos casos y
+   * valores ya calculados en geo.seismic_envelope (sección 2.1), solo que
+   * aquí se muestra el desglose completo de las 4 esquinas en vez de
+   * únicamente la más desfavorable.
+   */
+  _predimensionamientoIsoladaHtml(d, fnd, mat, geo) {
+    const gamma_c_tnm3 = (mat.gamma_c_kgm3 || 2400) / 1000;
+    const gamma_s_tnm3 = (fnd.gamma_kgm3 || 1800) / 1000;
+    const h = d.h || 0.5, Df = d.Df || 1.5;
+    const a = d.col_L, b = d.col_B;
+    const P = (d.Pd || 0) + (d.Pl || 0);
+    const qAdmTnm2 = (fnd.q_adm_kgcm2 || 1) * 10;
+    const qAdmEff = 0.9 * qAdmTnm2;
+
+    let A_req = (P * 1.075) / qAdmEff;
+    let cRaw = 0;
+    for (let iter = 0; iter < 6; iter++) {
+      const disc = (a - b) * (a - b) + 4 * A_req;
+      cRaw = (-(a + b) + Math.sqrt(disc)) / 4;
+      const cRound = Math.max(0.05, Math.ceil(cRaw / 0.05) * 0.05);
+      const L = 2 * cRound + a, B = 2 * cRound + b;
+      const selfWeight = gamma_c_tnm3 * (L * B) * h + gamma_s_tnm3 * (L * B) * Math.max(0, Df - h);
+      const A_next = (P + selfWeight) / qAdmEff;
+      if (Math.abs(A_next - A_req) < 1e-6) { A_req = A_next; break; }
+      A_req = A_next;
+    }
+    const cRound = Math.max(0.05, Math.ceil(cRaw / 0.05) * 0.05);
+    const Lp = 2 * cRound + a, Bp = 2 * cRound + b;
+
+    const step1Html = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">1°) Verificamos por cargas de gravedad</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Área tentativa: A = 1.075·P / (0.9·q_adm) — curso UNI "Concreto Armado 2", ec. 2-4. Volado "c" repartido por igual alrededor de la columna en ambas direcciones (L = 2c + b, B = 2c + t), refinado iterando con el peso propio real.</p>
+      <table class="text-xs w-full mb-2">
+        ${this._specRow('Carga en servicio (P = CM+CV)', `${this._trimNum(P)} Ton`)}
+        ${this._specRow('Área tentativa (A)', `${A_req.toFixed(2)} m²`)}
+        ${this._specRow('Volado calculado (c)', `${cRaw.toFixed(2)} m`)}
+        ${this._specRow('Volado redondeado (c)', `${cRound.toFixed(2)} m`)}
+      </table>
+      <p class="text-xs font-semibold text-slate-800">Dimensiones predimensionadas: L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>`;
+
+    let step2Html = '';
+    if (geo.hasSeismic && geo.seismic_envelope) {
+      const factor = d.seismic_bearing_factor || 1.3;
+      const rows = geo.seismic_envelope.rows;
+      const Pgrav = geo.N_tn;
+      const MxGrav = (d.Mx_d || 0) + (d.Mx_l || 0);
+      const MyGrav = (d.My_d || 0) + (d.My_l || 0);
+      const seisOf = (label) => {
+        if (label.includes('sismo)')) return [0, 0, 0];
+        if (label.includes('X')) return [d.Psx || 0, d.Mx_sx || 0, d.My_sx || 0];
+        return [d.Psy || 0, d.Mx_sy || 0, d.My_sy || 0];
+      };
+      const rowLabel = (label) => label
+        .replace('σ1 (sin sismo)', 'CM+CV')
+        .replace('σ2 (sismo +X)', 'CM+CV+SXD')
+        .replace('σ2 (sismo −X)', 'CM+CV−SXD')
+        .replace('σ3 (sismo +Y)', 'CM+CV+SYD')
+        .replace('σ3 (sismo −Y)', 'CM+CV−SYD');
+
+      const loadsRows = rows.map((r) => {
+        const [Ps, Mxs, Mys] = seisOf(r.label);
+        return `<tr class="odd:bg-sky-50">
+          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${rowLabel(r.label)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Pgrav)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(MxGrav)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(MyGrav)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Ps)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mxs)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mys)}</td>
+        </tr>`;
+      }).join('');
+
+      const pressureRows = rows.map((r) => {
+        const [s1, s2, s3, s4] = [r.corners.c, r.corners.d, r.corners.b, r.corners.e].map(kpaToKgcm2);
+        const sx = r.rect ? `${kpaToKgcm2(r.rect.qx).toFixed(2)}` : '—';
+        const sy = r.rect ? `${kpaToKgcm2(r.rect.qy).toFixed(2)}` : '—';
+        return `<tr class="odd:bg-sky-50">
+          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${rowLabel(r.label)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s1.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s2.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s3.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s4.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${sx}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${sy}</td>
+          <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(r.pass)}</td>
+        </tr>`;
+      }).join('');
+
+      step2Html = `
+        <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2°) Verificamos por cargas de gravedad más momento y sismo</h4>
+        <p class="text-[11px] text-slate-500 mb-2">σadm = ${this._p(fnd.q_adm_kgcm2)} &nbsp; σadm(sismo) = ${this._p(fnd.q_adm_kgcm2 * factor)} (factor × ${factor.toFixed(2)}). σ = P/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata; si alguna resulta en tracción, se usa la distribución rectangular equivalente σx, σy.</p>
+        <div class="overflow-x-auto">
+        <table class="text-xs w-full border-collapse mb-2">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" rowspan="2"></th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="3">Cargas de gravedad</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="3">Cargas de sismo</th>
+          </tr><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">P (Ton)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Mx (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">My (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">P (Ton)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Mx (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">My (Ton-m)</th>
+          </tr></thead>
+          <tbody>${loadsRows}</tbody>
+        </table>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="text-xs w-full border-collapse">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" rowspan="2"></th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="4">Distribución trapezoidal (kg/cm²)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="2">Distribución rectangular (kg/cm²)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" rowspan="2">Estado</th>
+          </tr><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ1</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ2</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ3</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ4</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σx</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σy</th>
+          </tr></thead>
+          <tbody>${pressureRows}</tbody>
+        </table>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-1">Con la geometría vigente (L = ${d.L.toFixed(2)} m, B = ${d.B.toFixed(2)} m), la envolvente sísmica de servicio: ${this._estadoCell(geo.seismic_envelope.pass)}.</p>`;
+    }
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">II) PREDIMENSIONAMIENTO</div>
+      <div class="p-3">${step1Html}${step2Html}</div>
+    </div>`;
+  }
+
   _reportIsolated() {
     const d = this.data.isolated, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
@@ -977,6 +1127,7 @@ export class AppUIController {
     html += this._visualizerImagesHtml();
 
     html += this._datosDisenoIsoladaHtml(d, fnd, mat, geo.hasSeismic);
+    html += this._predimensionamientoIsoladaHtml(d, fnd, mat, geo);
 
     html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
     html += `<p class="text-xs text-slate-600 mb-2">Peso propio de la zapata: ${geo.W_footing_tn.toFixed(2)} tn. Peso del relleno sobre la zapata: ${geo.W_soil_tn.toFixed(2)} tn. Carga total transmitida al suelo N = ${geo.N_tn.toFixed(2)} tn.</p>`;
