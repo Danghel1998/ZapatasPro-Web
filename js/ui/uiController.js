@@ -281,23 +281,38 @@ export class AppUIController {
    * Predimensionamiento clásico de zapata aislada: reparte el mismo volado
    * "c" alrededor de la columna en ambas direcciones (L = 2c + col_L,
    * B = 2c + col_B), resolviendo "c" para que L×B cubra el área requerida
-   * A = P·(1+fz)/q_adm (fz = 10%, asignación usual para peso propio +
-   * relleno en esta etapa — antes de conocer la geometría final). Mismo
-   * criterio que el método enseñado en el curso UNI y usado en la hoja de
-   * cálculo de referencia para el área tentativa de la zapata.
+   * A = (P + peso propio)/q_adm — mismo criterio de proporcionamiento
+   * geométrico enseñado en el curso UNI. El peso propio (zapata + relleno)
+   * depende de L×B, así que se itera: primera estimación con un 10%
+   * asumido de P (para arrancar sin conocer aún la geometría), y luego 2-3
+   * iteraciones con el peso propio REAL de la geometría resultante, hasta
+   * converger — necesario porque el 10% fijo puede quedarse corto en
+   * zapatas chicas con desplante profundo (Df grande frente a L, B).
    */
   predimensionIsolated() {
-    const { isolated, foundation } = this.data;
+    const { isolated, foundation, materials } = this.data;
     const P = (isolated.Pd || 0) + (isolated.Pl || 0);
     const q_adm_tnm2 = (foundation.q_adm_kgcm2 || 1) * 10;
     if (P <= 0 || q_adm_tnm2 <= 0) return;
-    const fz = 0.10;
-    const A_req = (P * (1 + fz)) / q_adm_tnm2;
     const a = isolated.col_L, b = isolated.col_B;
-    const disc = (a - b) * (a - b) + 4 * A_req;
-    const c = Math.max(0.05, Math.ceil(((-(a + b) + Math.sqrt(disc)) / 4) / 0.05) * 0.05);
-    isolated.L = Math.round((Math.ceil((2 * c + a) / 0.05) * 0.05) * 100) / 100;
-    isolated.B = Math.round((Math.ceil((2 * c + b) / 0.05) * 0.05) * 100) / 100;
+    const h = isolated.h || 0.5, Df = isolated.Df || 1.5;
+    const gamma_c_tnm3 = (materials.gamma_c_kgm3 || 2400) / 1000;
+    const gamma_s_tnm3 = (foundation.gamma_kgm3 || 1800) / 1000;
+
+    let A_req = (P * 1.10) / q_adm_tnm2;
+    let L, B;
+    for (let iter = 0; iter < 6; iter++) {
+      const disc = (a - b) * (a - b) + 4 * A_req;
+      const c = Math.max(0.05, Math.ceil(((-(a + b) + Math.sqrt(disc)) / 4) / 0.05) * 0.05);
+      L = Math.ceil((2 * c + a) / 0.05) * 0.05;
+      B = Math.ceil((2 * c + b) / 0.05) * 0.05;
+      const selfWeight = gamma_c_tnm3 * (L * B) * h + gamma_s_tnm3 * (L * B) * Math.max(0, Df - h);
+      const A_req_next = (P + selfWeight) / q_adm_tnm2;
+      if (Math.abs(A_req_next - A_req) < 1e-6) { A_req = A_req_next; break; }
+      A_req = A_req_next;
+    }
+    isolated.L = Math.round(L * 100) / 100;
+    isolated.B = Math.round(B * 100) / 100;
     this.syncFormWithData();
     this.recalculateAndRender();
   }
