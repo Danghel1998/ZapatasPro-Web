@@ -318,8 +318,12 @@ export class FootingCanvasRenderer {
     ctx.fillText(`Nivel de terreno (Df = ${Df.toFixed(2)} m)`, t.toX(-L * 0.72), t.toY(Df) - 6);
     ctx.restore();
 
+    // La cota de "h" se dibuja del lado OPUESTO a la columna cuando esta es
+    // excéntrica (borde/esquina), para no cruzarse con el detalle de
+    // ganchos/esperas que quedan apretados junto al borde de ese lado.
+    const dimSideX = ex > 1e-6 ? -L / 2 : L / 2;
     this._dimLine(ctx, t.toX(-L / 2), t.toY(0), t.toX(L / 2), t.toY(0), `L = ${L.toFixed(2)} m`, 26);
-    this._dimLine(ctx, t.toX(L / 2), t.toY(h), t.toX(L / 2), t.toY(0), `h = ${h.toFixed(2)} m`, 18, true);
+    this._dimLine(ctx, t.toX(dimSideX), t.toY(h), t.toX(dimSideX), t.toY(0), `h = ${h.toFixed(2)} m`, 18, true);
   }
 
   /**
