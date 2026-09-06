@@ -45,7 +45,7 @@
       <select id="preset_dropdown" class="text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 font-bold py-1.5 px-3 rounded text-slate-700 transition cursor-pointer" onchange="if(this.value) { document.querySelector(`[data-preset='${this.value}']`).click(); }">
         <option value="zapata_aislada_tipica" selected>⭐ Zapata Aislada Típica</option>
         <option value="zapata_aislada_excentrica">Zapata Aislada con Momento</option>
-        <option value="zapata_aislada_sismo">Zapata Aislada con Sismo (envolvente 9 combinaciones)</option>
+        <option value="zapata_aislada_sismo">Zapata Aislada con Sismo (envolvente σ1/σ2/σ3)</option>
         <option value="zapata_combinada_tipica">Zapata Combinada (2 columnas)</option>
         <option value="zapata_conectada_tipica">Zapata Conectada (viga de conexión)</option>
       </select>
@@ -60,6 +60,10 @@
       <button id="btn_toggle_theme" class="text-xs flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold py-1.5 px-3 rounded transition" title="Cambiar entre tema claro y oscuro">
         <i data-lucide="moon" id="icon_theme_moon" class="w-3.5 h-3.5 text-slate-500"></i>
         <i data-lucide="sun" id="icon_theme_sun" class="w-3.5 h-3.5 text-slate-500 hidden"></i>
+      </button>
+
+      <button id="btn_toggle_punit" class="text-xs flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold py-1.5 px-3 rounded transition" title="Cambiar unidad de presión (kg/cm² / tonf/m²)">
+        <i data-lucide="gauge" class="w-3.5 h-3.5 text-slate-500"></i> <span id="punit_label">kg/cm²</span>
       </button>
 
       <button id="btn_export_png" class="text-xs flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold py-1.5 px-3 rounded transition">
@@ -130,7 +134,7 @@
                   <option value="esquinera">Esquinera (αs=20)</option>
                 </select></div></div>
               <button id="btn-predim-aislada" type="button" class="w-full mt-1 px-2 py-1.5 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[11px] font-semibold transition">📐 Predimensionar L y B a partir del área requerida</button>
-              <p class="text-[10px] text-slate-500">Calcula L y B repartiendo el mismo volado "c" alrededor de la columna en ambas direcciones (L = 2c + col_L, B = 2c + col_B), de modo que L×B cubra el área requerida por A = (P + peso propio)/q_adm — itera con el peso propio real de la geometría resultante. Igual criterio que el predimensionamiento clásico de zapatas aisladas.</p>
+              <p class="text-[10px] text-slate-500">Calcula L y B repartiendo el mismo volado "c" alrededor de la columna en ambas direcciones (L = 2c + col_L, B = 2c + col_B), de modo que L×B cubra el área A ≥ 1.075(P)/(0.9·q_adm) — curso UNI "Concreto Armado 2", ec. 2-4 — refinada iterando con el peso propio real de la geometría resultante.</p>
             </div>
           </div>
 
@@ -161,7 +165,7 @@
               <span class="eng-card-title text-rose-950"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Cargas de Sismo (opcional)</span>
               <span class="text-[10px] text-rose-700 font-semibold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">Envolvente E.030</span>
             </div>
-            <p class="text-[10px] text-slate-500 mb-2">Si se deja todo en 0, el diseño usa solo la combinación de gravedad 1.4CM+1.7CV. Si se ingresa sismo, se evalúa la envolvente completa (gravedad ± sismo X ± sismo Y, 9 combinaciones) igual que una memoria de cálculo con verificación sísmica.</p>
+            <p class="text-[10px] text-slate-500 mb-2">Si se deja todo en 0, el diseño usa solo la combinación de gravedad 1.4CM+1.7CV. Si se ingresa sismo, se evalúa σ1 (sin sismo) / σ2 (sismo X) / σ3 (sismo Y) en ambos sentidos ± — curso UNI "Concreto Armado 2", cap. 2.3.</p>
             <div class="space-y-1">
               <div class="eng-input-group"><label class="eng-label"><span>Sismo X — P / Mx / My</span></label>
                 <div class="flex gap-1">
@@ -323,7 +327,7 @@
               <div class="eng-input-group"><label class="eng-label"><span>Ángulo de fricción (ref.)</span><span class="eng-symbol">(φ)</span></label>
                 <div class="eng-cell-wrapper"><input type="number" step="0.5" min="15" max="45" class="eng-cell-input" data-bind="foundation.phi"><span class="eng-unit-badge">°</span></div></div>
               <div class="eng-input-group"><label class="eng-label font-bold text-slate-900"><span>Capacidad portante admisible</span><span class="eng-symbol text-amber-700">(q_adm)</span></label>
-                <div class="eng-cell-wrapper eng-cell-yellow-wrapper"><input type="number" step="0.1" min="0.3" max="10" class="eng-cell-input font-bold" data-bind="foundation.q_adm_kgcm2"><span class="eng-unit-badge">kg/cm²</span></div></div>
+                <div class="eng-cell-wrapper eng-cell-yellow-wrapper"><input type="number" step="0.1" min="0.3" max="10" class="eng-cell-input font-bold" data-bind="foundation.q_adm_kgcm2"><span class="eng-unit-badge" id="q_adm_unit_badge">kg/cm²</span></div></div>
             </div>
           </div>
 

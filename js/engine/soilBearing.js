@@ -54,14 +54,17 @@ export function calculateIsolatedBearing(footingData) {
   const pass_bearing = q_max <= q_adm;
 
   // -------------------------------------------------------------------
-  // ENVOLVENTE SÍSMICA (5 casos: sin sismo, ±sismo X, ±sismo Y) — solo si
-  // se ingresó algún dato de sismo; en caso contrario se omite y rige
-  // únicamente el caso biaxial simple ya calculado arriba (compatibilidad
-  // con proyectos sin sismo). Sigue el mismo criterio de una zapata real
-  // de referencia: la presión de contacto ya incluye el peso propio
-  // (aquí, el W_footing+W_soil ya calculado, más preciso que un factor
-  // global), y el sismo se combina en ambos sentidos (+/−) porque puede
-  // actuar en cualquier dirección.
+  // ENVOLVENTE SÍSMICA (σ1 sin sismo, σ2 sismo X, σ3 sismo Y — cada una
+  // evaluada en ambos sentidos ±) — solo si se ingresó algún dato de
+  // sismo; en caso contrario se omite y rige únicamente el caso biaxial
+  // simple ya calculado arriba. Misma notación y estructura que el curso
+  // UNI "Concreto Armado 2" (cap. 2.3, ecuaciones 2-5/2-6/2-7): σ = P/A ±
+  // 6Mx/(BL²) ± 6My/(LB²), con σ2/σ3 limitados a factor·q_adm (el curso
+  // usa 1.3; aquí es configurable). El peso propio se suma con su valor
+  // REAL ya calculado (W_footing+W_soil) en vez del 1.075 fijo del curso
+  // (una aproximación general antes de conocer L,B — aquí ya se conocen),
+  // y el sismo se combina en ambos sentidos (+/−) porque puede actuar en
+  // cualquier dirección.
   // -------------------------------------------------------------------
   const hasSeismic = Math.abs(isolated.Psx || 0) > 1e-9 || Math.abs(isolated.Psy || 0) > 1e-9
     || Math.abs(isolated.Mx_sx || 0) > 1e-9 || Math.abs(isolated.My_sx || 0) > 1e-9
@@ -72,14 +75,14 @@ export function calculateIsolatedBearing(footingData) {
     const Psx = tnToKn(isolated.Psx || 0), Mx_sx = tnToKn(isolated.Mx_sx || 0), My_sx = tnToKn(isolated.My_sx || 0);
     const Psy = tnToKn(isolated.Psy || 0), Mx_sy = tnToKn(isolated.Mx_sy || 0), My_sy = tnToKn(isolated.My_sy || 0);
     const selfWeight = W_footing + W_soil;
-    const q_adm_seismic = q_adm * (isolated.seismic_bearing_factor || 1.25);
+    const q_adm_seismic = q_adm * (isolated.seismic_bearing_factor || 1.3);
 
     const cases = [
-      { label: 'CM+CV', N: P_col + selfWeight, Mx, My, limit: q_adm },
-      { label: 'CM+CV+SXD', N: P_col + Psx + selfWeight, Mx: Mx + Mx_sx, My: My + My_sx, limit: q_adm_seismic },
-      { label: 'CM+CV−SXD', N: P_col - Psx + selfWeight, Mx: Mx - Mx_sx, My: My - My_sx, limit: q_adm_seismic },
-      { label: 'CM+CV+SYD', N: P_col + Psy + selfWeight, Mx: Mx + Mx_sy, My: My + My_sy, limit: q_adm_seismic },
-      { label: 'CM+CV−SYD', N: P_col - Psy + selfWeight, Mx: Mx - Mx_sy, My: My - My_sy, limit: q_adm_seismic },
+      { label: 'σ1 (sin sismo)', N: P_col + selfWeight, Mx, My, limit: q_adm },
+      { label: 'σ2 (sismo +X)', N: P_col + Psx + selfWeight, Mx: Mx + Mx_sx, My: My + My_sx, limit: q_adm_seismic },
+      { label: 'σ2 (sismo −X)', N: P_col - Psx + selfWeight, Mx: Mx - Mx_sx, My: My - My_sx, limit: q_adm_seismic },
+      { label: 'σ3 (sismo +Y)', N: P_col + Psy + selfWeight, Mx: Mx + Mx_sy, My: My + My_sy, limit: q_adm_seismic },
+      { label: 'σ3 (sismo −Y)', N: P_col - Psy + selfWeight, Mx: Mx - Mx_sy, My: My - My_sy, limit: q_adm_seismic },
     ];
     const env = evaluateEnvelope(cases, L, B);
     seismic_envelope = {

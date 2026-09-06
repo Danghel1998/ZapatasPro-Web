@@ -44,14 +44,15 @@ export const DEFAULT_FOOTING_DATA = {
     // Sismo en X e Y (cada uno como un caso de carga de servicio propio,
     // sin descomponer en muerta/viva — igual convención que la hoja de
     // cálculo de referencia: "SXD"/"SYD"). Con ambos en 0 (caso por
-    // defecto), la envolvente de 9 combinaciones se reduce a la única
-    // combinación de gravedad 1.4CM+1.7CV, igual que antes.
+    // defecto), la envolvente σ1/σ2/σ3 se reduce a la única combinación
+    // de gravedad 1.4CM+1.7CV, igual que antes.
     Psx: 0.0, Mx_sx: 0.0, My_sx: 0.0,
     Psy: 0.0, Mx_sy: 0.0, My_sy: 0.0,
     // Incremento admisible en la capacidad portante para combinaciones
-    // que incluyen sismo (E.030) — 1.25 en la hoja de referencia, aunque
-    // hay fuentes que usan 1.30; queda configurable.
-    seismic_bearing_factor: 1.25,
+    // que incluyen sismo (E.030) — 1.30 según el curso UNI "Concreto
+    // Armado 2" (cap. 2.3); la hoja de cálculo de referencia usa 1.25.
+    // Queda configurable.
+    seismic_bearing_factor: 1.3,
     // Tipo de columna (afecta αs en punzonamiento: 40 interior, 30
     // medianera/borde, 20 esquinera — E.060 / ACI 318).
     col_type: 'interior',
@@ -150,7 +151,7 @@ export const PRESET_PROJECTS = {
     })()
   },
   zapata_aislada_sismo: {
-    title: 'Zapata Aislada Interior con Sismo (envolvente de 9 combinaciones)',
+    title: 'Zapata Aislada Interior con Sismo (envolvente σ1/σ2/σ3)',
     desc: 'Columna interior 0.35×0.25 m con cargas de gravedad y sismo en X e Y (caso de referencia de una hoja de cálculo real de diseño estructural).',
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));

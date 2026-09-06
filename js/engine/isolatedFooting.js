@@ -8,13 +8,16 @@
  *
  * Cuando el proyecto incluye sismo (Psx/Psy o sus momentos distintos de
  * cero), la presión de diseño no se calcula con el par (Pu, Mu_x, Mu_y)
- * simple, sino con la envolvente de 9 combinaciones factoradas de una
- * hoja de cálculo real de referencia (1.4CM+1.7CV; 1.25(CM+CV)±sismo X/Y;
- * 0.9CM±sismo X/Y): se evalúan las 4 esquinas de cada combinación y se
- * toma la más desfavorable (o su rectángulo equivalente, si hay tracción
- * en alguna esquina) como una presión ÚNICA y UNIFORME "su" — igual
- * criterio que esa hoja, que diseña punzonamiento, corte y flexión con
- * esa presión envolvente en vez de con la variación biaxial exacta.
+ * simple, sino con el método del curso UNI "Concreto Armado 2" (cap. 2.3,
+ * ecuaciones 2-5 a 2-10): se calculan las presiones de SERVICIO σ1 (sin
+ * sismo), σ2 (sismo en X, ambos sentidos) y σ3 (sismo en Y, ambos
+ * sentidos) en las 4 esquinas de la zapata, y cada una se amplifica por
+ * un ÚNICO factor — σult1=1.55·σ1, σult2=1.25·σ2, σult3=1.25·σ3 — una
+ * simplificación (según el propio curso) de la combinación completa de
+ * cargas factoradas. La más desfavorable de las tres se toma como
+ * presión de diseño ÚNICA y UNIFORME "su", con la que se diseña
+ * punzonamiento, corte y flexión en vez de con la variación biaxial
+ * exacta.
  */
 
 import { REBAR_TABLE } from '../constants.js';
@@ -67,42 +70,53 @@ export function calculateIsolatedStructural(footingData) {
     const Psx = tnToKn(isolated.Psx || 0), Mx_sx = tnToKn(isolated.Mx_sx || 0), My_sx = tnToKn(isolated.My_sx || 0);
     const Psy = tnToKn(isolated.Psy || 0), Mx_sy = tnToKn(isolated.Mx_sy || 0), My_sy = tnToKn(isolated.My_sy || 0);
 
-    // Peso propio (zapata + relleno sobre ella), igual criterio de la hoja
-    // de referencia: se suma al término axial de CADA combinación con el
-    // MISMO factor que multiplica a CM en esa combinación (es carga muerta),
-    // ya que sí contribuye a la presión de contacto bruta que la hoja usa
-    // como presión de diseño uniforme "su" (a diferencia de la presión NETA
-    // usada en el resto de esta herramienta quando no hay sismo).
+    // Peso propio (zapata + relleno sobre ella), con su valor REAL ya
+    // calculado (en vez del 1.075 fijo del curso, una aproximación válida
+    // antes de conocer L,B — aquí ya se conocen). Se suma al término axial
+    // de σ1/σ2/σ3 ANTES de amplificar, igual que el 1.075(PCM+PCV) del
+    // curso queda dentro de σ1 antes de multiplicar por 1.55.
     const gamma_s = kgm3ToKnm3(foundation.gamma_kgm3);
     const gamma_c = kgm3ToKnm3(materials.gamma_c_kgm3);
     const A0 = L * B;
     const selfWeight = gamma_c * A0 * isolated.h + gamma_s * A0 * Math.max(0, isolated.Df - isolated.h);
 
+    const P_cmcv = Pd + Pl + selfWeight;
+    const Mx_cmcv = Mxd + Mxl;
+    const My_cmcv = Myd + Myl;
+
+    // σult1 = 1.55·σ1, σult2 = 1.25·σ2, σult3 = 1.25·σ3 (ecuaciones 2-8 a
+    // 2-10 del curso) — simplificación de la combinación completa de
+    // cargas factoradas. Cada σ se evalúa en las 4 esquinas (o su
+    // rectángulo equivalente si hay tracción) ANTES de amplificar.
     const cases = [
-      { label: '1.4CM+1.7CV', N: LF_D * Pd + LF_L * Pl + LF_D * selfWeight, Mx: LF_D * Mxd + LF_L * Mxl, My: LF_D * Myd + LF_L * Myl },
-      { label: '1.25(CM+CV)+SXD', N: 1.25 * (Pd + Pl) + Psx + 1.25 * selfWeight, Mx: 1.25 * (Mxd + Mxl) + Mx_sx, My: 1.25 * (Myd + Myl) + My_sx },
-      { label: '1.25(CM+CV)−SXD', N: 1.25 * (Pd + Pl) - Psx + 1.25 * selfWeight, Mx: 1.25 * (Mxd + Mxl) - Mx_sx, My: 1.25 * (Myd + Myl) - My_sx },
-      { label: '1.25(CM+CV)+SYD', N: 1.25 * (Pd + Pl) + Psy + 1.25 * selfWeight, Mx: 1.25 * (Mxd + Mxl) + Mx_sy, My: 1.25 * (Myd + Myl) + My_sy },
-      { label: '1.25(CM+CV)−SYD', N: 1.25 * (Pd + Pl) - Psy + 1.25 * selfWeight, Mx: 1.25 * (Mxd + Mxl) - Mx_sy, My: 1.25 * (Myd + Myl) - My_sy },
-      { label: '0.9CM+SXD', N: 0.9 * Pd + Psx + 0.9 * selfWeight, Mx: 0.9 * Mxd + Mx_sx, My: 0.9 * Myd + My_sx },
-      { label: '0.9CM−SXD', N: 0.9 * Pd - Psx + 0.9 * selfWeight, Mx: 0.9 * Mxd - Mx_sx, My: 0.9 * Myd - My_sx },
-      { label: '0.9CM+SYD', N: 0.9 * Pd + Psy + 0.9 * selfWeight, Mx: 0.9 * Mxd + Mx_sy, My: 0.9 * Myd + My_sy },
-      { label: '0.9CM−SYD', N: 0.9 * Pd - Psy + 0.9 * selfWeight, Mx: 0.9 * Mxd - Mx_sy, My: 0.9 * Myd - My_sy },
+      { label: 'σ1 (sin sismo)', amp: 1.55, N: P_cmcv, Mx: Mx_cmcv, My: My_cmcv },
+      { label: 'σ2 (sismo +X)', amp: 1.25, N: P_cmcv + Psx, Mx: Mx_cmcv + Mx_sx, My: My_cmcv + My_sx },
+      { label: 'σ2 (sismo −X)', amp: 1.25, N: P_cmcv - Psx, Mx: Mx_cmcv - Mx_sx, My: My_cmcv - My_sx },
+      { label: 'σ3 (sismo +Y)', amp: 1.25, N: P_cmcv + Psy, Mx: Mx_cmcv + Mx_sy, My: My_cmcv + My_sy },
+      { label: 'σ3 (sismo −Y)', amp: 1.25, N: P_cmcv - Psy, Mx: Mx_cmcv - Mx_sy, My: My_cmcv - My_sy },
     ];
     const env = evaluateEnvelope(cases, L, B);
+    const rows = env.rows.map((r) => ({
+      ...r,
+      q_governing_kgcm2: kpaToKgcm2(r.q_governing),
+      su: r.amp * r.q_governing,
+      su_kgcm2: kpaToKgcm2(r.amp * r.q_governing),
+    }));
+    let governingRow = rows[0];
+    rows.forEach((r) => { if (r.su > governingRow.su) governingRow = r; });
     envelope = {
-      rows: env.rows.map((r) => ({ ...r, q_governing_kgcm2: kpaToKgcm2(r.q_governing) })),
+      rows,
       uses_rectangular: env.uses_rectangular,
-      su: env.governing_q,
-      su_kgcm2: kpaToKgcm2(env.governing_q),
-      governingRow: env.governingRow,
+      su: governingRow.su,
+      su_kgcm2: governingRow.su_kgcm2,
+      governingRow,
     };
     // "su" ya es la presión de diseño (envolvente), aplicada de forma
     // UNIFORME sobre toda el área — se traduce a una carga puntual
     // equivalente Pu = su·A sin momento, para que designFootingSlab la
     // reparta con la misma mecánica de siempre (cantiléver con presión
     // constante en vez de variable).
-    Pu = env.governing_q * L * B;
+    Pu = governingRow.su * L * B;
     Mu_x = 0;
     Mu_y = 0;
   } else {

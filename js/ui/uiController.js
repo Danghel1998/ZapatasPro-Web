@@ -27,12 +27,36 @@ export class AppUIController {
     this.bearingResults = null;
     this.structResults = null;
     this.rebarSchedule = null;
+    // Unidad de presión para MOSTRAR resultados (q_adm, q_max, σ, su, etc.)
+    // — el dato interno siempre se guarda en kg/cm²; 'tnm2' solo convierte
+    // en pantalla/reporte (1 kg/cm² = 10 tonf/m²).
+    this.pressureUnit = localStorage.getItem('zapataspro_punit') || 'kgcm2';
 
     const canvasEl = document.getElementById('footingCanvas');
     this.renderer = new FootingCanvasRenderer(canvasEl);
     this.renderer3D = null; // se crea perezosamente al abrir "Detalle 3D" por primera vez
 
     this.initUI();
+    this.recalculateAndRender();
+  }
+
+  /** Formatea una presión dada en kg/cm² según la unidad activa. */
+  _p(kgcm2, decimals = 2) {
+    if (this.pressureUnit === 'tnm2') return `${(kgcm2 * 10).toFixed(decimals)} tonf/m²`;
+    return `${kgcm2.toFixed(decimals)} kg/cm²`;
+  }
+
+  /** Refleja this.pressureUnit en la UI: etiqueta del botón, badge de
+   * unidad de q_adm, el valor mostrado en el input de q_adm (convertido),
+   * y recalcula/re-renderiza para que los badges y la memoria usen la
+   * unidad activa. */
+  _syncPressureUnitUI() {
+    const label = document.getElementById('punit_label');
+    const badge = document.getElementById('q_adm_unit_badge');
+    const isTn = this.pressureUnit === 'tnm2';
+    if (label) label.textContent = isTn ? 'tonf/m²' : 'kg/cm²';
+    if (badge) badge.textContent = isTn ? 'tonf/m²' : 'kg/cm²';
+    this.syncFormWithData();
     this.recalculateAndRender();
   }
 
@@ -43,6 +67,11 @@ export class AppUIController {
     this.syncFormWithData();
     this.updateFootingTypeVisibility();
     this.renderer.resizeCanvas();
+    const label = document.getElementById('punit_label');
+    const badge = document.getElementById('q_adm_unit_badge');
+    const isTn = this.pressureUnit === 'tnm2';
+    if (label) label.textContent = isTn ? 'tonf/m²' : 'kg/cm²';
+    if (badge) badge.textContent = isTn ? 'tonf/m²' : 'kg/cm²';
   }
 
   populateRebarSelects() {
@@ -84,6 +113,11 @@ export class AppUIController {
       if (!isCommit && Number.isNaN(val)) return;
     } else {
       val = element.value;
+    }
+    // El dato interno de q_adm siempre se guarda en kg/cm² — si la unidad
+    // activa es tonf/m², lo que se acaba de teclear está en esa unidad.
+    if (bindPath === 'foundation.q_adm_kgcm2' && this.pressureUnit === 'tnm2' && !Number.isNaN(val)) {
+      val = val / 10;
     }
     target[lastKey] = val;
 
@@ -273,6 +307,15 @@ export class AppUIController {
       });
     }
 
+    const punitBtn = document.getElementById('btn_toggle_punit');
+    if (punitBtn) {
+      punitBtn.addEventListener('click', () => {
+        this.pressureUnit = this.pressureUnit === 'tnm2' ? 'kgcm2' : 'tnm2';
+        localStorage.setItem('zapataspro_punit', this.pressureUnit);
+        this._syncPressureUnitUI();
+      });
+    }
+
     const predimAisladaBtn = document.getElementById('btn-predim-aislada');
     if (predimAisladaBtn) predimAisladaBtn.addEventListener('click', () => this.predimensionIsolated());
 
@@ -283,17 +326,23 @@ export class AppUIController {
     if (predimConectadaBtn) predimConectadaBtn.addEventListener('click', () => this.predimensionConnected());
   }
 
-  /** Área requerida (m²) por peso propio real, iterando hasta converger:
-   * primera estimación con 10% de P para arrancar sin conocer la geometría,
-   * luego con el peso propio (zapata + relleno) de la geometría resultante
-   * en cada vuelta — ver predimensionIsolated() para la razón de iterar. */
+  /** Área requerida (m²), método del curso UNI "Concreto Armado 2"
+   * (ecuación 2-4): A ≥ 1.075(PCM+PCV)/(0.9·q_adm) — el 0.9 deja un margen
+   * del 10% de la capacidad admisible sin usar en el predimensionamiento.
+   * Se itera hasta converger: primera estimación con el 1.075 fijo del
+   * curso (una aproximación razonable antes de conocer L,B), y desde la
+   * segunda vuelta con el peso propio REAL (zapata + relleno) de la
+   * geometría resultante en cada paso — más preciso una vez que L,B ya se
+   * conocen, y necesario porque el 1.075 fijo puede quedarse corto en
+   * zapatas con desplante profundo frente a su tamaño. */
   _iterateArea(P_tn, h, Df, gamma_c_tnm3, gamma_s_tnm3, solveLB) {
-    let A_req = (P_tn * 1.10) / this._qAdmTnm2();
+    const qAdmEff = 0.9 * this._qAdmTnm2();
+    let A_req = (P_tn * 1.075) / qAdmEff;
     let L, B;
     for (let iter = 0; iter < 6; iter++) {
       ({ L, B } = solveLB(A_req));
       const selfWeight = gamma_c_tnm3 * (L * B) * h + gamma_s_tnm3 * (L * B) * Math.max(0, Df - h);
-      const A_next = (P_tn + selfWeight) / this._qAdmTnm2();
+      const A_next = (P_tn + selfWeight) / qAdmEff;
       if (Math.abs(A_next - A_req) < 1e-6) { A_req = A_next; break; }
       A_req = A_next;
     }
@@ -400,16 +449,11 @@ export class AppUIController {
   }
 
   /**
-   * Predimensionamiento clásico de zapata aislada: reparte el mismo volado
-   * "c" alrededor de la columna en ambas direcciones (L = 2c + col_L,
-   * B = 2c + col_B), resolviendo "c" para que L×B cubra el área requerida
-   * A = (P + peso propio)/q_adm — mismo criterio de proporcionamiento
-   * geométrico enseñado en el curso UNI. El peso propio (zapata + relleno)
-   * depende de L×B, así que se itera: primera estimación con un 10%
-   * asumido de P (para arrancar sin conocer aún la geometría), y luego 2-3
-   * iteraciones con el peso propio REAL de la geometría resultante, hasta
-   * converger — necesario porque el 10% fijo puede quedarse corto en
-   * zapatas chicas con desplante profundo (Df grande frente a L, B).
+   * Predimensionamiento de zapata aislada — curso UNI "Concreto Armado 2"
+   * (cap. 2.1/2.2, ejemplo 2-1): área A ≥ 1.075(PCM+PCV)/(0.9·q_adm)
+   * (ec. 2-4, ver _iterateArea), y reparto del mismo volado "c" alrededor
+   * de la columna en ambas direcciones (L = 2c + col_L, B = 2c + col_B,
+   * ec. de la figura 2-2) para que L×B cubra esa área.
    */
   predimensionIsolated() {
     const { isolated, foundation, materials } = this.data;
@@ -436,7 +480,10 @@ export class AppUIController {
       let target = this.data;
       for (let i = 0; i < parts.length - 1; i++) { if (!target) return; target = target[parts[i]]; }
       if (!target) return;
-      const val = target[parts[parts.length - 1]];
+      let val = target[parts[parts.length - 1]];
+      if (bindPath === 'foundation.q_adm_kgcm2' && this.pressureUnit === 'tnm2' && typeof val === 'number') {
+        val = Math.round(val * 10 * 100) / 100;
+      }
       if (input.type === 'checkbox') input.checked = !!val; else input.value = val !== undefined ? val : '';
     });
   }
@@ -567,15 +614,15 @@ export class AppUIController {
     if (type === 'conectada') {
       this.renderKPIBadge('kpi_bearing', {
         title: 'Presión de Contacto (Z1 / Z2)',
-        val: `${geo.q1_kgcm2.toFixed(2)} / ${geo.q2_kgcm2.toFixed(2)} kg/cm²`,
-        req: `≤ ${geo.q_adm_kgcm2.toFixed(2)}`,
+        val: `${this._p(geo.q1_kgcm2).replace(/ [^ ]+$/, '')} / ${this._p(geo.q2_kgcm2)}`,
+        req: `≤ ${this._p(geo.q_adm_kgcm2)}`,
         pass: geo.pass_bearing_1 && geo.pass_bearing_2,
         progress: Math.max(geo.q1_kgcm2, geo.q2_kgcm2) / geo.q_adm_kgcm2 * 100,
       });
     } else if (geo.hasSeismic) {
       this.renderKPIBadge('kpi_bearing', {
         title: 'Presión de Contacto (envolvente sísmica)',
-        val: `${geo.seismic_envelope.governing_q_kgcm2.toFixed(2)} kg/cm²`,
+        val: this._p(geo.seismic_envelope.governing_q_kgcm2),
         req: `${geo.seismic_envelope.governingRow.label}`,
         pass: geo.pass_bearing,
         progress: (geo.seismic_envelope.governing_q_kgcm2 / geo.seismic_envelope.governingRow.limit_kgcm2) * 100,
@@ -583,8 +630,8 @@ export class AppUIController {
     } else {
       this.renderKPIBadge('kpi_bearing', {
         title: 'Presión de Contacto (q_max)',
-        val: `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`,
-        req: `≤ ${geo.q_adm_kgcm2.toFixed(2)}`,
+        val: this._p(geo.q_max_kgcm2),
+        req: `≤ ${this._p(geo.q_adm_kgcm2)}`,
         pass: geo.pass_bearing,
         progress: (geo.q_max_kgcm2 / geo.q_adm_kgcm2) * 100,
       });
@@ -821,7 +868,7 @@ export class AppUIController {
         ['Sismo Y — P / Mx / My (servicio)', `${d.Psy.toFixed(2)} tn / ${d.Mx_sy.toFixed(2)} / ${d.My_sy.toFixed(2)} tn·m`],
       ] : []),
       ['Peso específico del suelo (γs)', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`],
-      ['Capacidad portante admisible (q_adm)', `${fnd.q_adm_kgcm2.toFixed(2)} kg/cm²`],
+      ['Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2)],
       [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
     ]);
 
@@ -830,29 +877,32 @@ export class AppUIController {
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
       ['Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ex) <= geo.ex_max)],
       ['Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ey) <= geo.ey_max)],
-      ['Presión máxima de contacto q_max (sin sismo)', `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_kgcm2)],
+      ['Presión máxima de contacto q_max (sin sismo)', this._p(geo.q_max_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_kgcm2)],
     ]);
     if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
 
     if (geo.hasSeismic) {
-      html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">2.1 Envolvente Sísmica (Cargas de Servicio) — 5 Combinaciones</h3>`;
-      html += `<p class="text-xs text-slate-600 mb-2">Presión en las 4 esquinas de la zapata para cada combinación (o su rectángulo equivalente si alguna esquina resulta en tracción); se reporta la más desfavorable de cada una.</p>`;
+      html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">2.1 Envolvente Sísmica (Cargas de Servicio)</h3>`;
+      html += `<p class="text-xs text-slate-600 mb-2">Método del curso UNI "Concreto Armado 2" (cap. 2.3, ec. 2-5 a 2-7): σ = P/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para σ1 (sin sismo), σ2 (sismo en X) y σ3 (sismo en Y) — cada una en ambos sentidos ±, ya que el sismo puede actuar en cualquier dirección. σ1 se limita a q_adm; σ2 y σ3, a ${(fnd.seismic_bearing_factor ?? 1.3).toFixed(2)}·q_adm.</p>`;
       html += this._table(['Combinación', 'q (esquina más desfavorable)', 'Límite admisible', 'Estado'], geo.seismic_envelope.rows.map((r) => [
         r.label,
-        `${r.q_governing_kgcm2.toFixed(2)} kg/cm²${r.minC < 0 ? ' (rectangular)' : ''}`,
-        `≤ ${r.limit_kgcm2.toFixed(2)} kg/cm²`,
+        `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,
+        `≤ ${this._p(r.limit_kgcm2)}`,
         this._badgeHtml(r.pass),
       ]));
-      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${geo.seismic_envelope.governing_q_kgcm2.toFixed(2)} kg/cm².</p>`;
+      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${this._p(geo.seismic_envelope.governing_q_kgcm2)}.</p>`;
     }
 
     if (str.hasSeismic) {
-      html += this._sectionTitle('3. Envolvente Sísmica (Cargas Factoradas) — 9 Combinaciones');
-      html += `<p class="text-xs text-slate-600 mb-2">Misma lógica que la verificación de servicio, con las cargas factoradas (1.4CM+1.7CV; 1.25(CM+CV)±sismo; 0.9CM±sismo). La presión gobernante "su" se aplica luego de forma <b>uniforme</b> sobre toda la zapata para el diseño por punzonamiento, corte y flexión.</p>`;
-      html += this._table(['Combinación', 'q (esquina más desfavorable)'], str.envelope.rows.map((r) => [
-        r.label, `${r.q_governing_kgcm2.toFixed(2)} kg/cm²${r.minC < 0 ? ' (rectangular)' : ''}`,
+      html += this._sectionTitle('3. Envolvente Sísmica (Cargas Factoradas)');
+      html += `<p class="text-xs text-slate-600 mb-2">Mismas presiones de servicio σ1/σ2/σ3 de la sección 2.1, amplificadas cada una por un solo factor — σult1 = 1.55·σ1, σult2 = 1.25·σ2, σult3 = 1.25·σ3 (ec. 2-8 a 2-10 del curso) — una simplificación de la combinación completa de cargas factoradas. La más desfavorable se toma como presión de diseño "su", aplicada de forma <b>uniforme</b> sobre toda la zapata para el diseño por punzonamiento, corte y flexión.</p>`;
+      html += this._table(['Combinación', 'σ (servicio, esquina más desfavorable)', 'Factor', 'σult (diseño)'], str.envelope.rows.map((r) => [
+        r.label,
+        `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,
+        `× ${r.amp.toFixed(2)}`,
+        this._p(r.su_kgcm2),
       ]));
-      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${str.envelope.governingRow.label}</b>. su = ${str.envelope.su_kgcm2.toFixed(3)} kg/cm² (presión de diseño uniforme).</p>`;
+      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${str.envelope.governingRow.label}</b>. su = ${this._p(str.envelope.su_kgcm2, 3)} (presión de diseño uniforme).</p>`;
       html += this._slabReportHtml(str, d.L, d.B, 4);
     } else {
       html += this._slabReportHtml(str, d.L, d.B, 3);
@@ -879,7 +929,7 @@ export class AppUIController {
       ['Columna 2 (col2_L × col2_B)', `${d.col2_L.toFixed(2)} × ${d.col2_B.toFixed(2)} m`],
       ['Carga de servicio Columna 1 (D/L)', `${d.P1d.toFixed(1)} / ${d.P1l.toFixed(1)} tn`],
       ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(1)} / ${d.P2l.toFixed(1)} tn`],
-      ['Capacidad portante admisible (q_adm)', `${fnd.q_adm_kgcm2.toFixed(2)} kg/cm²`],
+      ['Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2)],
       [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
     ]);
 
@@ -887,7 +937,7 @@ export class AppUIController {
     html += `<p class="text-xs text-slate-600 mb-2">Resultante de columnas R = ${geo.R_tn.toFixed(2)} tn, ubicada a x̄ = ${geo.x_R.toFixed(3)} m del borde izquierdo. Con el peso propio, la resultante total N = ${geo.N_tn.toFixed(2)} tn actúa a x_N = ${geo.x_N.toFixed(3)} m (centro geométrico de la zapata en L/2 = ${(d.L / 2).toFixed(3)} m).</p>`;
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
       ['Excentricidad e = x_N − L/2', `${(geo.e * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.e_max * 100).toFixed(2)} cm`, this._badgeHtml(geo.within_kern)],
-      ['Presión máxima de contacto q_max', `${geo.q_max_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.pass_bearing)],
+      ['Presión máxima de contacto q_max', this._p(geo.q_max_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.pass_bearing)],
     ]);
     if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
 
@@ -1034,7 +1084,7 @@ export class AppUIController {
       ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(1)} / ${d.P2l.toFixed(1)} tn`],
       ['Momento neto Columna 1 (D/L)', `${d.M1_d.toFixed(1)} / ${d.M1_l.toFixed(1)} tn·m`],
       ['Momento neto Columna 2 (D/L)', `${d.M2_d.toFixed(1)} / ${d.M2_l.toFixed(1)} tn·m`],
-      ['Capacidad portante admisible (q_adm)', `${fnd.q_adm_kgcm2.toFixed(2)} kg/cm²`],
+      ['Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2)],
       [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
     ]);
 
@@ -1043,8 +1093,8 @@ export class AppUIController {
     html += `<p class="text-xs text-slate-600 mb-2">La columna 1 no puede centrarse en su zapata (límite de propiedad): excentricidad e1 = L1/2 − col1_L/2 = ${(geo.e1 * 100).toFixed(2)} cm. Para que la Zapata 1 trabaje con presión <b>uniforme</b>, la viga de conexión transmite una fuerza R = ${geo.R_tn.toFixed(2)} tn hacia la Zapata 2. Tomando momentos respecto al centroide de la Zapata 1 (ΣFy=0, ΣM=0)${hasM ? `, incluyendo el momento neto de cada columna (M1=${geo.M1_tn.toFixed(2)}, M2=${geo.M2_tn.toFixed(2)} tn·m)` : ''}: N2 = P2 − P1·e1/(s−e1) + (M1+M2)/(s−e1) = ${geo.N2_tn.toFixed(2)} tn, N1 = P1+P2−N2 = ${geo.N1_tn.toFixed(2)} tn.</p>`;
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
       ['Reacción N2 positiva (método aplicable)', `${geo.N2_tn.toFixed(2)} tn`, '> 0', this._badgeHtml(geo.pass_positive_reaction)],
-      ['Presión de contacto Zapata 1 (q1)', `${geo.q1_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.pass_bearing_1)],
-      ['Presión de contacto Zapata 2 (q2)', `${geo.q2_kgcm2.toFixed(2)} kg/cm²`, `≤ q_adm = ${geo.q_adm_kgcm2.toFixed(2)} kg/cm²`, this._badgeHtml(geo.pass_bearing_2)],
+      ['Presión de contacto Zapata 1 (q1)', this._p(geo.q1_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.pass_bearing_1)],
+      ['Presión de contacto Zapata 2 (q2)', this._p(geo.q2_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.pass_bearing_2)],
     ]);
 
     html += this._sectionTitle('3. Zapata 1 (Excéntrica) — Diseño Estructural');
