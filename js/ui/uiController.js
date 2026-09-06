@@ -272,6 +272,34 @@ export class AppUIController {
         link.click();
       });
     }
+
+    const predimAisladaBtn = document.getElementById('btn-predim-aislada');
+    if (predimAisladaBtn) predimAisladaBtn.addEventListener('click', () => this.predimensionIsolated());
+  }
+
+  /**
+   * Predimensionamiento clásico de zapata aislada: reparte el mismo volado
+   * "c" alrededor de la columna en ambas direcciones (L = 2c + col_L,
+   * B = 2c + col_B), resolviendo "c" para que L×B cubra el área requerida
+   * A = P·(1+fz)/q_adm (fz = 10%, asignación usual para peso propio +
+   * relleno en esta etapa — antes de conocer la geometría final). Mismo
+   * criterio que el método enseñado en el curso UNI y usado en la hoja de
+   * cálculo de referencia para el área tentativa de la zapata.
+   */
+  predimensionIsolated() {
+    const { isolated, foundation } = this.data;
+    const P = (isolated.Pd || 0) + (isolated.Pl || 0);
+    const q_adm_tnm2 = (foundation.q_adm_kgcm2 || 1) * 10;
+    if (P <= 0 || q_adm_tnm2 <= 0) return;
+    const fz = 0.10;
+    const A_req = (P * (1 + fz)) / q_adm_tnm2;
+    const a = isolated.col_L, b = isolated.col_B;
+    const disc = (a - b) * (a - b) + 4 * A_req;
+    const c = Math.max(0.05, Math.ceil(((-(a + b) + Math.sqrt(disc)) / 4) / 0.05) * 0.05);
+    isolated.L = Math.round((Math.ceil((2 * c + a) / 0.05) * 0.05) * 100) / 100;
+    isolated.B = Math.round((Math.ceil((2 * c + b) / 0.05) * 0.05) * 100) / 100;
+    this.syncFormWithData();
+    this.recalculateAndRender();
   }
 
   syncFormWithData() {
