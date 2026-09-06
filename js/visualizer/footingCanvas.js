@@ -229,19 +229,21 @@ export class FootingCanvasRenderer {
    * en el origen); `colCx`/`colCy` son la posición de la columna relativa
    * a ese centro. */
   _drawSlabRebarGrid(ctx, t, slab, cx, L, B, colCx, colCy, colL, colB) {
-    const drawParallelBars = (alongAxis, spacingCm, runHalf, spreadHalf, color) => {
+    const drawParallelBars = (alongAxis, spacingCm, runHalf, spreadHalf, color, center = 0, edgeLimit = Infinity) => {
       if (!spacingCm) return;
       const spacing_m = spacingCm / 100;
+      const lo = Math.max(-edgeLimit, -spreadHalf + center);
+      const hi = Math.min(edgeLimit, spreadHalf + center);
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.4;
-      for (let pos = -spreadHalf + spacing_m / 2; pos <= spreadHalf; pos += spacing_m) {
+      for (let p = lo + spacing_m / 2; p <= hi - spacing_m / 2 + 1e-6; p += spacing_m) {
         ctx.beginPath();
         if (alongAxis === 'L') {
-          ctx.moveTo(t.toX(cx - runHalf), t.toY(pos));
-          ctx.lineTo(t.toX(cx + runHalf), t.toY(pos));
+          ctx.moveTo(t.toX(cx - runHalf), t.toY(p));
+          ctx.lineTo(t.toX(cx + runHalf), t.toY(p));
         } else {
-          ctx.moveTo(t.toX(cx + pos), t.toY(-runHalf));
-          ctx.lineTo(t.toX(cx + pos), t.toY(runHalf));
+          ctx.moveTo(t.toX(cx + p), t.toY(-runHalf));
+          ctx.lineTo(t.toX(cx + p), t.toY(runHalf));
         }
         ctx.stroke();
       }
@@ -252,15 +254,20 @@ export class FootingCanvasRenderer {
     drawParallelBars(longIsL ? 'L' : 'B', longSpacing, longIsL ? L / 2 : B / 2, longIsL ? B / 2 : L / 2, '#2563eb');
     const shortAxis = longIsL ? 'B' : 'L';
     const shortRunHalf = longIsL ? B / 2 : L / 2;
+    // La franja central de ACI 318 15.4.4 va centrada en la COLUMNA, no en
+    // el centro geométrico de la zapata — importa cuando la columna es
+    // excéntrica (borde/esquina). Se recorta al borde real de la losa.
+    const bandCenter = longIsL ? colCx : colCy;
+    const edgeLimit = (longIsL ? L : B) / 2;
     const bandHalf = slab.banding.bandWidth / 2;
-    drawParallelBars(shortAxis, slab.banding.sp_band, shortRunHalf, bandHalf, '#dc2626');
+    drawParallelBars(shortAxis, slab.banding.sp_band, shortRunHalf, bandHalf, '#dc2626', bandCenter, edgeLimit);
     if (slab.banding.sp_outer) {
-      const outerFrom = bandHalf;
-      const outerTo = longIsL ? L / 2 : B / 2;
+      const outerWidth = slab.banding.outerWidthEach;
       const spacing_m = slab.banding.sp_outer / 100;
       ctx.strokeStyle = '#f97316';
-      for (let pos = outerFrom + spacing_m / 2; pos <= outerTo; pos += spacing_m) {
-        [pos, -pos].forEach((p) => {
+      for (let d = spacing_m / 2; d <= outerWidth - spacing_m / 2 + 1e-6; d += spacing_m) {
+        [bandCenter + bandHalf + d, bandCenter - bandHalf - d].forEach((p) => {
+          if (p < -edgeLimit || p > edgeLimit) return;
           ctx.beginPath();
           if (shortAxis === 'L') { ctx.moveTo(t.toX(cx - shortRunHalf), t.toY(p)); ctx.lineTo(t.toX(cx + shortRunHalf), t.toY(p)); }
           else { ctx.moveTo(t.toX(cx + p), t.toY(-shortRunHalf)); ctx.lineTo(t.toX(cx + p), t.toY(shortRunHalf)); }
@@ -346,11 +353,12 @@ export class FootingCanvasRenderer {
     const lineDepth = longIsL ? yBottom : yTop;
     const dotDepth = longIsL ? yTop : yBottom;
 
-    // --- Esperas / arranque de columna: 2 barras visibles en este corte,
-    // desde la parrilla de la zapata hasta cerca de la corona del muñón,
-    // con gancho de 90° hacia el interior en la base ---
+    // --- Esperas / arranque de columna: 2 barras rectas visibles en este
+    // corte, desde la parrilla de la zapata hasta cerca de la corona del
+    // muñón (recta, igual que en el Detalle 3D — el anclaje se verifica en
+    // compresión, no lleva gancho, así que no se dibuja uno aquí) ---
     if (col_L && stemH) {
-      const dowelDepth = Math.max(lineDepth, dotDepth);
+      const dowelDepth = Math.min(lineDepth, dotDepth);
       const yDowelBot = t.toY(dowelDepth);
       const yDowelTop = t.toY(h + stemH - cover);
       ctx.save();
@@ -360,8 +368,6 @@ export class FootingCanvasRenderer {
         const dx = ex + sign * (col_L / 2 - cover);
         const xPix = t.toX(dx);
         ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix, yDowelTop); ctx.stroke();
-        const hookPxDowel = hook * t.scale * 0.5;
-        ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix - sign * hookPxDowel, yDowelBot); ctx.stroke();
       });
       ctx.restore();
     }
@@ -384,12 +390,23 @@ export class FootingCanvasRenderer {
     let lineSpacingLabel, dotSpacingLabel;
     if (longIsL) {
       lineSpacingLabel = `${str.L_dir.spacing} cm`;
+      // La franja central de ACI 318 15.4.4 va centrada en la COLUMNA (ex),
+      // no en el centro geométrico de la zapata — y se recorta al margen
+      // físico disponible (recubrimiento) para que ningún punto quede
+      // dibujado más cerca del borde que el recubrimiento real (mismo
+      // margen que usa la línea azul).
+      const edgeLimit = L / 2 - cover - rMain;
       const bandHalf = str.banding.bandWidth / 2;
+      const bandLo = Math.max(-edgeLimit, ex - bandHalf);
+      const bandHi = Math.min(edgeLimit, ex + bandHalf);
       const spBand = (str.banding.sp_band || 20) / 100;
-      for (let p = -bandHalf + spBand / 2; p <= bandHalf - spBand / 2 + 1e-6; p += spBand) dotPositions.push(p);
+      for (let p = bandLo + spBand / 2; p <= bandHi - spBand / 2 + 1e-6; p += spBand) dotPositions.push(p);
       if (str.banding.sp_outer) {
         const spOuter = str.banding.sp_outer / 100;
-        for (let p = bandHalf + spOuter / 2; p <= L / 2 - spOuter / 2 + 1e-6; p += spOuter) { dotPositions.push(p); dotPositions.push(-p); }
+        const outerWidth = str.banding.outerWidthEach;
+        for (let d = spOuter / 2; d <= outerWidth - spOuter / 2 + 1e-6; d += spOuter) {
+          [bandHi + d, bandLo - d].forEach((p) => { if (p >= -edgeLimit && p <= edgeLimit) dotPositions.push(p); });
+        }
       }
       dotSpacingLabel = `${str.banding.sp_band} cm (banda central) / ${str.banding.sp_outer ?? '—'} cm (exterior)`;
     } else {
