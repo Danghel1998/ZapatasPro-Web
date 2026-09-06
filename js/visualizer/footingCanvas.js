@@ -54,16 +54,56 @@ export class FootingCanvasRenderer {
 
   /** Renderiza temporalmente en otro modo de vista para capturar una
    * imagen PNG (usada en la hoja de "Plano"), sin alterar la vista
-   * interactiva activa. */
+   * interactiva activa. Se fuerza la paleta CLARA sin importar el tema de
+   * pantalla — la hoja de plano se imprime siempre en blanco. */
   captureSnapshot(mode) {
     const prevMode = this.viewMode;
     this.viewMode = mode;
+    this._forceLight = true;
     this.render();
     let dataUrl = '';
     try { dataUrl = this.canvas.toDataURL('image/png'); } catch (e) { /* canvas no disponible aún */ }
+    this._forceLight = false;
     this.viewMode = prevMode;
     this.render();
     return dataUrl;
+  }
+
+  /** Paleta de colores del canvas 2D, según el tema activo (o siempre
+   * clara si _forceLight está activo, usado al exportar la hoja de
+   * Plano). Los colores semánticos del acero (azul/rojo/naranja/verde) se
+   * mantienen iguales en ambos temas. */
+  _palette() {
+    const dark = !this._forceLight && document.documentElement.classList.contains('dark');
+    return dark ? {
+      grid: '#1e293b',
+      concreteFill: '#334155',
+      concreteStroke: '#94a3b8',
+      columnFill: '#475569',
+      columnStroke: '#cbd5e1',
+      soilFill: '#2b2213',
+      dimStroke: '#94a3b8',
+      text: '#cbd5e1',
+      groundLine: '#eab308',
+      strapFill: 'rgba(148,163,184,0.35)',
+      strapStroke: '#94a3b8',
+      limitLine: '#f87171',
+      axisLine: '#cbd5e1',
+    } : {
+      grid: '#eef2f7',
+      concreteFill: '#e7ebf1',
+      concreteStroke: '#334155',
+      columnFill: '#94a3b8',
+      columnStroke: '#1e293b',
+      soilFill: '#f2e9d8',
+      dimStroke: '#64748b',
+      text: '#334155',
+      groundLine: '#8a6d1f',
+      strapFill: 'rgba(100,116,139,0.35)',
+      strapStroke: '#475569',
+      limitLine: '#dc2626',
+      axisLine: '#334155',
+    };
   }
 
   resizeCanvas() {
@@ -106,7 +146,7 @@ export class FootingCanvasRenderer {
   drawGrid(width, height) {
     const ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = '#eef2f7';
+    ctx.strokeStyle = this._palette().grid;
     ctx.lineWidth = 1;
     const step = 24;
     for (let x = 0; x < width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
@@ -133,9 +173,10 @@ export class FootingCanvasRenderer {
   }
 
   _dimLine(ctx, x1, y1, x2, y2, label, offset = 18, vertical = false) {
+    const p = this._palette();
     ctx.save();
-    ctx.strokeStyle = '#64748b';
-    ctx.fillStyle = '#334155';
+    ctx.strokeStyle = p.dimStroke;
+    ctx.fillStyle = p.text;
     ctx.lineWidth = 1;
     ctx.font = '11px Inter, sans-serif';
     if (!vertical) {
@@ -168,11 +209,12 @@ export class FootingCanvasRenderer {
     const ctx = this.ctx;
 
     if (this.viewMode === 'plan' || this.viewMode === 'rebar') {
+      const p = this._palette();
       const t = this._worldTransform(width, height, { xMin: -L * 0.7, xMax: L * 0.7, yMin: -B * 0.7, yMax: B * 0.7 });
       // Zapata
       ctx.save();
-      ctx.fillStyle = '#e7ebf1';
-      ctx.strokeStyle = '#334155';
+      ctx.fillStyle = p.concreteFill;
+      ctx.strokeStyle = p.concreteStroke;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.rect(t.toX(-L / 2), t.toY(B / 2), L * t.scale, B * t.scale);
@@ -182,8 +224,8 @@ export class FootingCanvasRenderer {
       if (this.viewMode === 'plan') {
         // Columna
         ctx.save();
-        ctx.fillStyle = '#94a3b8';
-        ctx.strokeStyle = '#1e293b';
+        ctx.fillStyle = p.columnFill;
+        ctx.strokeStyle = p.columnStroke;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.rect(t.toX(ex - col_L / 2), t.toY(ey + col_B / 2), col_L * t.scale, col_B * t.scale);
@@ -214,7 +256,7 @@ export class FootingCanvasRenderer {
     const longSpacing = str.isLLong ? str.L_dir.spacing : str.B_dir.spacing;
     ctx.save();
     ctx.font = '11px Inter, sans-serif';
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = this._palette().text;
     ctx.fillText(`Azul: ${str.isLLong ? 'paralelo a L' : 'paralelo a B'} (dirección larga, uniforme) @ ${longSpacing} cm`, 10, 18);
     ctx.fillText(`Rojo: banda central (dirección corta) @ ${str.banding.sp_band} cm`, 10, 34);
     if (str.banding.sp_outer) ctx.fillText(`Naranja: franjas exteriores (dirección corta) @ ${str.banding.sp_outer} cm`, 10, 50);
@@ -275,7 +317,7 @@ export class FootingCanvasRenderer {
         });
       }
     }
-    ctx.strokeStyle = '#1e293b';
+    ctx.strokeStyle = this._palette().columnStroke;
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(t.toX(cx + colCx - colL / 2), t.toY(colCy + colB / 2), colL * t.scale, colB * t.scale);
     ctx.setLineDash([]);
@@ -289,23 +331,24 @@ export class FootingCanvasRenderer {
     const stemH = 0.8; // muñón de columna dibujado, referencial
     const t = this._worldTransform(width, height, { xMin: -L * 0.75, xMax: L * 0.75, yMin: -0.6, yMax: h + stemH + 0.8 });
 
+    const p = this._palette();
     // Suelo
     ctx.save();
-    ctx.fillStyle = '#f2e9d8';
+    ctx.fillStyle = p.soilFill;
     ctx.fillRect(0, t.toY(0), width, height - t.toY(0));
     ctx.restore();
 
     // Zapata
     ctx.save();
-    ctx.fillStyle = '#cbd5e1';
-    ctx.strokeStyle = '#334155';
+    ctx.fillStyle = p.concreteFill;
+    ctx.strokeStyle = p.concreteStroke;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.rect(t.toX(-L / 2), t.toY(h), L * t.scale, h * t.scale);
     ctx.fill(); ctx.stroke();
 
     // Columna (respeta la excentricidad de "Tipo de columna": interior=centrada, borde/esquina=al ras del borde)
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = p.columnFill;
     ctx.beginPath();
     ctx.rect(t.toX(ex - col_L / 2), t.toY(h + stemH), col_L * t.scale, stemH * t.scale);
     ctx.fill(); ctx.stroke();
@@ -316,11 +359,11 @@ export class FootingCanvasRenderer {
 
     // Nivel de terreno / Df
     ctx.save();
-    ctx.strokeStyle = '#8a6d1f';
+    ctx.strokeStyle = p.groundLine;
     ctx.setLineDash([5, 3]);
     ctx.beginPath(); ctx.moveTo(t.toX(-L * 0.75), t.toY(Df)); ctx.lineTo(t.toX(L * 0.75), t.toY(Df)); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = '#8a6d1f';
+    ctx.fillStyle = p.groundLine;
     ctx.font = '11px Inter, sans-serif';
     ctx.fillText(`Nivel de terreno (Df = ${Df.toFixed(2)} m)`, t.toX(-L * 0.72), t.toY(Df) - 6);
     ctx.restore();
@@ -444,7 +487,7 @@ export class FootingCanvasRenderer {
     const t = this._worldTransform(width, height, { xMin: -L * 0.75, xMax: L * 0.75, yMin: -1.4, yMax: 1.0 });
 
     ctx.save();
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = this._palette().axisLine;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(t.toX(-L / 2), t.toY(0)); ctx.lineTo(t.toX(L / 2), t.toY(0)); ctx.stroke();
     ctx.restore();
@@ -467,7 +510,7 @@ export class FootingCanvasRenderer {
     ctx.restore();
 
     ctx.save();
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = this._palette().text;
     ctx.font = 'bold 12px Inter, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`q_max = ${qMax.toFixed(2)} kg/cm²`, t.toX(-L / 2) + 4, t.toY(-(qMax / maxScale) * pxHeight) - 6);
@@ -489,10 +532,11 @@ export class FootingCanvasRenderer {
     const ctx = this.ctx;
 
     if (this.viewMode === 'plan' || this.viewMode === 'rebar') {
+      const p = this._palette();
       const t = this._worldTransform(width, height, { xMin: -L * 0.15, xMax: L * 1.15, yMin: -B * 0.8, yMax: B * 0.8 });
       ctx.save();
-      ctx.fillStyle = '#e7ebf1';
-      ctx.strokeStyle = '#334155';
+      ctx.fillStyle = p.concreteFill;
+      ctx.strokeStyle = p.concreteStroke;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.rect(t.toX(0), t.toY(B / 2), L * t.scale, B * t.scale);
@@ -502,13 +546,13 @@ export class FootingCanvasRenderer {
       if (this.viewMode === 'plan') {
         [[a1, col1_L, col1_B, '1'], [a2, col2_L, col2_B, '2']].forEach(([xc, cl, cb, label]) => {
           ctx.save();
-          ctx.fillStyle = '#94a3b8';
-          ctx.strokeStyle = '#1e293b';
+          ctx.fillStyle = p.columnFill;
+          ctx.strokeStyle = p.columnStroke;
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.rect(t.toX(xc - cl / 2), t.toY(cb / 2), cl * t.scale, cb * t.scale);
           ctx.fill(); ctx.stroke();
-          ctx.fillStyle = '#1e293b';
+          ctx.fillStyle = p.columnStroke;
           ctx.font = 'bold 11px Inter, sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(`C${label}`, t.toX(xc), t.toY(0) + 4);
@@ -559,7 +603,7 @@ export class FootingCanvasRenderer {
 
     ctx.save();
     ctx.font = '11px Inter, sans-serif';
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = this._palette().text;
     ctx.fillText(`Azul: acero inferior longitudinal @ ${str.bottom.spacing} cm — Rojo (punteado): superior @ ${str.top.spacing} cm`, 10, 18);
     ctx.fillText(`Naranja: transversal bajo columnas @ ${str.trans1.spacing} / ${str.trans2.spacing} cm`, 10, 34);
     ctx.restore();
@@ -573,20 +617,21 @@ export class FootingCanvasRenderer {
     const stemH = 0.8;
     const t = this._worldTransform(width, height, { xMin: -L * 0.1, xMax: L * 1.1, yMin: -0.6, yMax: h + stemH + 0.8 });
 
+    const p = this._palette();
     ctx.save();
-    ctx.fillStyle = '#f2e9d8';
+    ctx.fillStyle = p.soilFill;
     ctx.fillRect(0, t.toY(0), width, height - t.toY(0));
     ctx.restore();
 
     ctx.save();
-    ctx.fillStyle = '#cbd5e1';
-    ctx.strokeStyle = '#334155';
+    ctx.fillStyle = p.concreteFill;
+    ctx.strokeStyle = p.concreteStroke;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.rect(t.toX(0), t.toY(h), L * t.scale, h * t.scale);
     ctx.fill(); ctx.stroke();
 
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = p.columnFill;
     [[a1, col1_L], [a2, col2_L]].forEach(([xc, cl]) => {
       ctx.beginPath();
       ctx.rect(t.toX(xc - cl / 2), t.toY(h + stemH), cl * t.scale, stemH * t.scale);
@@ -595,7 +640,7 @@ export class FootingCanvasRenderer {
     ctx.restore();
 
     ctx.save();
-    ctx.strokeStyle = '#8a6d1f';
+    ctx.strokeStyle = p.groundLine;
     ctx.setLineDash([5, 3]);
     ctx.beginPath(); ctx.moveTo(t.toX(-L * 0.1), t.toY(Df)); ctx.lineTo(t.toX(L * 1.1), t.toY(Df)); ctx.stroke();
     ctx.setLineDash([]);
@@ -617,23 +662,24 @@ export class FootingCanvasRenderer {
     const ctx = this.ctx;
 
     if (this.viewMode === 'plan' || this.viewMode === 'rebar') {
+      const p = this._palette();
       const t = this._worldTransform(width, height, { xMin: -0.5, xMax: Math.max(L1, f2x0 + L2) + 0.5, yMin: -maxB * 0.8, yMax: maxB * 0.8 });
 
       ctx.save();
-      ctx.fillStyle = '#e7ebf1';
-      ctx.strokeStyle = '#334155';
+      ctx.fillStyle = p.concreteFill;
+      ctx.strokeStyle = p.concreteStroke;
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.rect(t.toX(0), t.toY(B1 / 2), L1 * t.scale, B1 * t.scale); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.rect(t.toX(f2x0), t.toY(B2 / 2), L2 * t.scale, B2 * t.scale); ctx.fill(); ctx.stroke();
       ctx.restore();
 
       ctx.save();
-      ctx.strokeStyle = '#dc2626';
+      ctx.strokeStyle = p.limitLine;
       ctx.setLineDash([6, 4]);
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(t.toX(0), t.toY(-maxB * 0.75)); ctx.lineTo(t.toX(0), t.toY(maxB * 0.75)); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#dc2626';
+      ctx.fillStyle = p.limitLine;
       ctx.font = '11px Inter, sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('Límite de propiedad', t.toX(0) + 4, t.toY(maxB * 0.75) + 12);
@@ -641,15 +687,15 @@ export class FootingCanvasRenderer {
 
       if (this.viewMode === 'plan') {
         ctx.save();
-        ctx.fillStyle = 'rgba(100,116,139,0.35)';
-        ctx.strokeStyle = '#475569';
+        ctx.fillStyle = p.strapFill;
+        ctx.strokeStyle = p.strapStroke;
         ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.rect(t.toX(c1), t.toY(strap_width / 2), (c2 - c1) * t.scale, strap_width * t.scale); ctx.fill(); ctx.stroke();
         ctx.restore();
 
         ctx.save();
-        ctx.fillStyle = '#94a3b8';
-        ctx.strokeStyle = '#1e293b';
+        ctx.fillStyle = p.columnFill;
+        ctx.strokeStyle = p.columnStroke;
         ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.rect(t.toX(c1 - col1_L / 2), t.toY(col1_B / 2), col1_L * t.scale, col1_B * t.scale); ctx.fill(); ctx.stroke();
         ctx.beginPath(); ctx.rect(t.toX(c2 - col2_L / 2), t.toY(col2_B / 2), col2_L * t.scale, col2_B * t.scale); ctx.fill(); ctx.stroke();
@@ -666,7 +712,7 @@ export class FootingCanvasRenderer {
         }
         ctx.save();
         ctx.font = '11px Inter, sans-serif';
-        ctx.fillStyle = '#334155';
+        ctx.fillStyle = p.text;
         ctx.fillText('Azul: dirección larga (uniforme) — Rojo: banda central — Naranja: franjas exteriores', 10, 18);
         ctx.restore();
       }
@@ -683,24 +729,25 @@ export class FootingCanvasRenderer {
     const maxH = Math.max(h1, h2);
     const t = this._worldTransform(width, height, { xMin: -0.5, xMax: f2x0 + L2 + 0.5, yMin: -0.6, yMax: maxH + stemH + 0.8 });
 
+    const p = this._palette();
     ctx.save();
-    ctx.fillStyle = '#f2e9d8';
+    ctx.fillStyle = p.soilFill;
     ctx.fillRect(0, t.toY(0), width, height - t.toY(0));
     ctx.restore();
 
     ctx.save();
-    ctx.fillStyle = '#cbd5e1';
-    ctx.strokeStyle = '#334155';
+    ctx.fillStyle = p.concreteFill;
+    ctx.strokeStyle = p.concreteStroke;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.rect(t.toX(0), t.toY(h1), L1 * t.scale, h1 * t.scale); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.rect(t.toX(f2x0), t.toY(h2), L2 * t.scale, h2 * t.scale); ctx.fill(); ctx.stroke();
 
     // Viga de conexión, entre las dos zapatas, apoyada sobre ellas
     const strapY = Math.min(h1, h2);
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = p.columnFill;
     ctx.beginPath(); ctx.rect(t.toX(c1), t.toY(strapY + strap_height), (c2 - c1) * t.scale, strap_height * t.scale); ctx.fill(); ctx.stroke();
 
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = p.columnFill;
     ctx.beginPath(); ctx.rect(t.toX(c1 - col1_L / 2), t.toY(h1 + stemH), col1_L * t.scale, stemH * t.scale); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.rect(t.toX(c2 - col2_L / 2), t.toY(h2 + stemH), col2_L * t.scale, stemH * t.scale); ctx.fill(); ctx.stroke();
     ctx.restore();
@@ -708,17 +755,17 @@ export class FootingCanvasRenderer {
     this._drawStrapReinforcement(ctx, t, c1, c2, strapY);
 
     ctx.save();
-    ctx.strokeStyle = '#dc2626';
+    ctx.strokeStyle = p.limitLine;
     ctx.setLineDash([6, 4]);
     ctx.beginPath(); ctx.moveTo(t.toX(0), t.toY(-0.4)); ctx.lineTo(t.toX(0), t.toY(maxH + stemH + 0.6)); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = '#dc2626';
+    ctx.fillStyle = p.limitLine;
     ctx.font = '11px Inter, sans-serif';
     ctx.fillText('Límite', t.toX(0) + 3, t.toY(maxH + stemH + 0.5));
     ctx.restore();
 
     ctx.save();
-    ctx.strokeStyle = '#8a6d1f';
+    ctx.strokeStyle = p.groundLine;
     ctx.setLineDash([5, 3]);
     ctx.beginPath(); ctx.moveTo(t.toX(-0.4), t.toY(Df)); ctx.lineTo(t.toX(f2x0 + L2 + 0.4), t.toY(Df)); ctx.stroke();
     ctx.setLineDash([]);
@@ -740,7 +787,7 @@ export class FootingCanvasRenderer {
     const yBot = strapY + cover;
 
     ctx.save();
-    ctx.strokeStyle = '#1e293b';
+    ctx.strokeStyle = this._palette().columnStroke;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(t.toX(c1 + cover), t.toY(yTop)); ctx.lineTo(t.toX(c2 - cover), t.toY(yTop)); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(t.toX(c1 + cover), t.toY(yBot)); ctx.lineTo(t.toX(c2 - cover), t.toY(yBot)); ctx.stroke();
@@ -758,7 +805,7 @@ export class FootingCanvasRenderer {
 
     ctx.save();
     ctx.font = '10px Inter, sans-serif';
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = this._palette().text;
     ctx.fillText(`Estribos ${strap.rebarTrans.name} @ ${strap.stirrup_spacing_cm} cm`, t.toX(c1), t.toY(yTop) - 6);
     ctx.restore();
   }
@@ -778,13 +825,14 @@ export class FootingCanvasRenderer {
     const plotW = width - marginL - marginR;
     const scaleX = (x) => marginL + (x / L) * plotW;
 
+    const p = this._palette();
     const drawPanel = (yTop, values, maxAbs, title, color, unit) => {
       const zeroY = yTop + panelH / 2;
       const scaleY = (panelH / 2 - 10) / maxAbs;
       ctx.save();
-      ctx.strokeStyle = '#cbd5e1';
+      ctx.strokeStyle = p.dimStroke;
       ctx.beginPath(); ctx.moveTo(marginL, zeroY); ctx.lineTo(width - marginR, zeroY); ctx.stroke();
-      ctx.fillStyle = '#334155';
+      ctx.fillStyle = p.text;
       ctx.font = 'bold 12px Inter, sans-serif';
       ctx.fillText(title, marginL, yTop + 14);
 
@@ -798,7 +846,7 @@ export class FootingCanvasRenderer {
       ctx.closePath();
       ctx.fill(); ctx.stroke();
 
-      ctx.fillStyle = '#334155';
+      ctx.fillStyle = p.text;
       ctx.font = '10px Inter, sans-serif';
       ctx.fillText(`max: ${maxAbs.toFixed(1)} ${unit}`, width - marginR - 90, yTop + 14);
       ctx.restore();
@@ -808,9 +856,9 @@ export class FootingCanvasRenderer {
     drawPanel(20 + panelH + 20, Ms, maxM, 'Momento Flector M(x) — positivo: tracción inferior', '#dc2626', 'kN·m');
 
     ctx.save();
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = p.text;
     ctx.beginPath(); ctx.moveTo(marginL, height - 20); ctx.lineTo(width - marginR, height - 20); ctx.stroke();
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = p.text;
     ctx.font = '10px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('0', marginL, height - 6);

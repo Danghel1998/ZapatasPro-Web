@@ -45,7 +45,8 @@ export class FootingRenderer3D {
     this.colors = COLORS_ISOLATED;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xffffff);
+    this._forceLight = false;
+    this._applyBackground();
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.05, 100);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -121,6 +122,25 @@ export class FootingRenderer3D {
 
   stop() { this._animating = false; }
 
+  /** true si corresponde pintar con la paleta oscura — nunca durante
+   * captureSnapshot() (usada para la hoja de Plano, que se imprime siempre
+   * en blanco sin importar el tema de pantalla). */
+  _isDark() {
+    return !this._forceLight && document.documentElement.classList.contains('dark');
+  }
+
+  _applyBackground() {
+    this.scene.background = new THREE.Color(this._isDark() ? 0x0f172a : 0xffffff);
+  }
+
+  /** Vuelve a pintar la escena con el tema activo (fondo + aristas de
+   * concreto + cotas), sin recalcular geometría — se llama al cambiar de
+   * tema en pantalla. */
+  refreshTheme() {
+    this._applyBackground();
+    if (this.footingData && this.structResults) this.updateData(this.footingData, null, this.structResults);
+  }
+
   captureSnapshot(width = 900, height = 700) {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     const usesFallbackSize = w < 2 || h < 2;
@@ -129,10 +149,19 @@ export class FootingRenderer3D {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(width, height);
     }
+    // La hoja de Plano siempre se genera en blanco, sin importar el tema
+    // de pantalla activo — se fuerza la paleta clara y se reconstruye la
+    // escena antes de capturar, luego se restaura el tema real.
+    this._forceLight = true;
+    this._applyBackground();
+    if (this.footingData && this.structResults) this.updateData(this.footingData, null, this.structResults);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     let dataUrl = '';
     try { dataUrl = this.renderer.domElement.toDataURL('image/png'); } catch (e) { /* WebGL no disponible aún */ }
+    this._forceLight = false;
+    this._applyBackground();
+    if (this.footingData && this.structResults) this.updateData(this.footingData, null, this.structResults);
     if (usesFallbackSize) this.resize();
     return dataUrl;
   }
@@ -205,15 +234,16 @@ export class FootingRenderer3D {
   }
 
   _addConcreteBox(cx, cy, cz, sx, sy, sz) {
+    const dark = this._isDark();
     const geometry = new THREE.BoxGeometry(sx, sy, sz);
     const material = new THREE.MeshStandardMaterial({
-      color: 0xcbd5e1, transparent: true, opacity: 0.45, side: THREE.DoubleSide, roughness: 0.9, metalness: 0.0, depthWrite: false,
+      color: dark ? 0x475569 : 0xcbd5e1, transparent: true, opacity: 0.45, side: THREE.DoubleSide, roughness: 0.9, metalness: 0.0, depthWrite: false,
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(cx, cy, cz);
     this.concreteGroup.add(mesh);
     const edges = new THREE.EdgesGeometry(geometry, 20);
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.5 }));
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: dark ? 0xcbd5e1 : 0x334155, transparent: true, opacity: 0.5 }));
     line.position.set(cx, cy, cz);
     this.concreteGroup.add(line);
   }
@@ -473,7 +503,8 @@ export class FootingRenderer3D {
   // ===================================================================
   // ETIQUETAS Y COTAS
   // ===================================================================
-  _makeTextSprite(lines, { color = '#0f172a', fontPx = 32, weight = 600, align = 'left' } = {}) {
+  _makeTextSprite(lines, { color, fontPx = 32, weight = 600, align = 'left' } = {}) {
+    const resolvedColor = color || (this._isDark() ? '#e2e8f0' : '#0f172a');
     const arr = Array.isArray(lines) ? lines : [lines];
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -485,7 +516,7 @@ export class FootingRenderer3D {
     canvas.width = Math.ceil(maxWidth) + padding * 2;
     canvas.height = Math.ceil(lineHeight * arr.length) + padding * 2;
     ctx.font = font;
-    ctx.fillStyle = color;
+    ctx.fillStyle = resolvedColor;
     ctx.textBaseline = 'top';
     ctx.textAlign = align;
     const xPos = align === 'left' ? padding : align === 'right' ? canvas.width - padding : canvas.width / 2;
@@ -505,8 +536,9 @@ export class FootingRenderer3D {
 
   _addDimension(p1, p2, text, extDir, extLen) {
     const group = this.annotationGroup;
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x1e293b });
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+    const dimColor = this._isDark() ? 0xcbd5e1 : 0x1e293b;
+    const lineMat = new THREE.LineBasicMaterial({ color: dimColor });
+    const dotMat = new THREE.MeshBasicMaterial({ color: dimColor });
     const dotGeo = new THREE.SphereGeometry((this._labelSize || 0.14) * 0.09, 8, 8);
     const e1 = p1.clone().addScaledVector(extDir, extLen);
     const e2 = p2.clone().addScaledVector(extDir, extLen);
@@ -521,9 +553,10 @@ export class FootingRenderer3D {
 
   _addLeaderLabel(anchor, labelPos, textLines) {
     const group = this.annotationGroup;
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x475569 });
+    const leaderColor = this._isDark() ? 0x94a3b8 : 0x475569;
+    const lineMat = new THREE.LineBasicMaterial({ color: leaderColor });
     group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([anchor, labelPos]), lineMat));
-    const dot = new THREE.Mesh(new THREE.SphereGeometry((this._labelSize || 0.14) * 0.09, 8, 8), new THREE.MeshBasicMaterial({ color: 0x475569 }));
+    const dot = new THREE.Mesh(new THREE.SphereGeometry((this._labelSize || 0.14) * 0.09, 8, 8), new THREE.MeshBasicMaterial({ color: leaderColor }));
     dot.position.copy(anchor);
     group.add(dot);
     const sprite = this._makeTextSprite(textLines, { fontPx: 28, align: 'left' });

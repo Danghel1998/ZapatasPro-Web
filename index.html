@@ -547,6 +547,10 @@
         const isDark = document.documentElement.classList.toggle('dark');
         localStorage.setItem('zapataspro_theme', isDark ? 'dark' : 'light');
         syncThemeIcon();
+        // El canvas 2D y la escena 3D pintan sus propios colores en JS (no
+        // vía CSS) — hay que forzar un repintado al cambiar de tema.
+        if (window.app?.renderer) window.app.renderer.render();
+        if (window.app?.renderer3D) window.app.renderer3D.refreshTheme();
       });
     });
   </script>

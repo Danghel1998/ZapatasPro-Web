@@ -486,9 +486,12 @@ code, pre, .font-mono {
 /* =========================================================================
    MODO OSCURO
    Se activa agregando la clase "dark" al <html>. La Memoria de Cálculo
-   (#report_panel) y las áreas de dibujo técnico (.canvas-container, planos
-   2D/3D) se mantienen siempre claras — como una hoja de papel — sin
-   importar el tema.
+   (#report_panel) se mantiene siempre clara — como una hoja de papel — sin
+   importar el tema, ya que se imprime en blanco. El visualizador 2D/3D SÍ
+   sigue el tema en pantalla (los colores del dibujo se resuelven en JS,
+   ver footingCanvas.js/footingRenderer3D.js); sus capturas para la hoja de
+   Plano se fuerzan siempre a la paleta clara al exportarlas, sin importar
+   el tema activo.
    ========================================================================= */
 
 html.dark {
@@ -628,9 +631,15 @@ html.dark #report_panel .border-slate-200 { border-color: #e2e8f0; }
 html.dark #report_panel .border-slate-300 { border-color: #cbd5e1; }
 
 html.dark .canvas-container {
-  background: radial-gradient(circle at 50% 50%, #ffffff 0%, #f8fafc 100%);
+  background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+  border-color: #334155;
 }
 html.dark #rebar3d_legend.bg-white\/90 {
-  background-color: rgba(255, 255, 255, 0.9);
-  color: #0f172a;
+  background-color: rgba(15, 23, 42, 0.9);
+  border-color: #334155;
+  color: #e2e8f0;
 }
+html.dark #rebar3d_legend .text-slate-600 { color: #cbd5e1; }
+html.dark #rebar3d_legend .text-slate-400 { color: #94a3b8; }
+html.dark #rebar3d_legend .hover\:bg-slate-50:hover { background-color: #334155; }
+html.dark #rebar3d_legend .border-slate-200 { border-color: #334155; }
