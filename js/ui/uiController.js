@@ -848,11 +848,32 @@ export class AppUIController {
     return this._table(['Marca', 'Elemento', 'Ø', 'Long. (1 barra)', 'Cant.', 'Long. Total', 'Peso'], rows);
   }
 
+  /** Bloque con los datos del cajetín (mismos datos que la hoja de Plano),
+   * mostrado al inicio de la Memoria de Cálculo para identificar el
+   * proyecto — se omiten los campos que el usuario dejó en blanco. */
+  _cajetinBlockHtml() {
+    const p = this.data.plano || {};
+    const fields = [
+      ['Proyecto', p.proyecto],
+      ['Propietario', p.propietario],
+      ['Ubicación', p.ubicacion],
+      ['Dibujado por', p.dibujado_por],
+      ['Revisado por', p.revisado_por],
+      ['Escala', p.escala],
+      ['Código de plano', p.codigo],
+    ].filter(([, v]) => v && String(v).trim() !== '');
+    if (!fields.length) return '';
+    return `<div class="text-xs text-slate-700 border border-slate-200 rounded-lg bg-slate-50 px-3 py-2.5 mb-6 grid grid-cols-2 gap-x-6 gap-y-1">
+      ${fields.map(([label, val]) => `<div><span class="font-semibold text-slate-500">${label}:</span> ${val}</div>`).join('')}
+    </div>`;
+  }
+
   _reportIsolated() {
     const d = this.data.isolated, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA AISLADA</h1>
-      <p class="text-xs text-slate-500 mb-6">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+      <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+    html += this._cajetinBlockHtml();
 
     html += this._sectionTitle('1. Datos de Entrada');
     html += this._table(['Parámetro', 'Valor'], [
@@ -918,7 +939,8 @@ export class AppUIController {
     const d = this.data.combined, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA COMBINADA</h1>
-      <p class="text-xs text-slate-500 mb-6">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+      <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+    html += this._cajetinBlockHtml();
 
     html += this._sectionTitle('1. Datos de Entrada');
     html += this._table(['Parámetro', 'Valor'], [
@@ -1070,7 +1092,8 @@ export class AppUIController {
     const d = this.data.connected, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA CONECTADA</h1>
-      <p class="text-xs text-slate-500 mb-6">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+      <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
+    html += this._cajetinBlockHtml();
 
     html += this._sectionTitle('1. Datos de Entrada');
     html += this._table(['Parámetro', 'Valor'], [
