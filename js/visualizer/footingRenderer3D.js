@@ -370,12 +370,21 @@ export class FootingRenderer3D {
     // cercano hasta el punto medio entre los ejes de columna (igual
     // criterio que calculateCombinedRebarSchedule), acotada siempre dentro
     // de [cover, L-cover] para que ninguna barra sobresalga del sólido.
+    // Se dibuja tanto en la capa inferior (junto al acero longitudinal
+    // inferior) como en la superior (junto al superior) — mismo acero
+    // transversal, espejado en ambas capas.
     const xMid = (a1 + a2) / 2;
-    positionsBetween(str.trans1.spacing, cover, Math.min(xMid, L - cover)).forEach((x) => {
-      this._addBarWithHooks(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m);
+    const trans1Xs = positionsBetween(str.trans1.spacing, cover, Math.min(xMid, L - cover));
+    const trans2Xs = positionsBetween(str.trans2.spacing, Math.max(xMid, cover), L - cover);
+    const yTransBottom = yBottom + 2 * rMain;
+    const yTransTop = yTop - 2 * rMain;
+    trans1Xs.forEach((x) => {
+      this._addBarWithHooks(V(x, yTransBottom, -zHalf), V(x, yTransBottom, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m);
+      this._addBarWithHooks(V(x, yTransTop, -zHalf), V(x, yTransTop, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m);
     });
-    positionsBetween(str.trans2.spacing, Math.max(xMid, cover), L - cover).forEach((x) => {
-      this._addBarWithHooks(V(x, yBottom + 2 * rMain, -zHalf), V(x, yBottom + 2 * rMain, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m);
+    trans2Xs.forEach((x) => {
+      this._addBarWithHooks(V(x, yTransBottom, -zHalf), V(x, yTransBottom, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m);
+      this._addBarWithHooks(V(x, yTransTop, -zHalf), V(x, yTransTop, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m);
     });
 
     const yDowelTop = h + stemH - cover;
