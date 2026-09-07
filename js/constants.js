@@ -149,6 +149,7 @@ export const DEFAULT_FOOTING_DATA = {
     proyecto: '',
     propietario: '',
     ubicacion: '',
+    estructuras: '',
     dibujado_por: 'Ing. Dan Oliden',
     revisado_por: '',
     escala: 'Como se indica',

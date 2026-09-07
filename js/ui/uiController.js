@@ -882,6 +882,7 @@ export class AppUIController {
       ['Proyecto', p.proyecto],
       ['Propietario', p.propietario],
       ['Ubicación', p.ubicacion],
+      ['Estructuras', p.estructuras],
       ['Dibujado por', p.dibujado_por],
       ['Revisado por', p.revisado_por],
       ['Escala', p.escala],
@@ -893,28 +894,6 @@ export class AppUIController {
     </div>`;
   }
 
-  /** Imágenes del visualizador (Planta, Detalle de Armado y, si ya se
-   * abrió alguna vez, Isométrico 3D) embebidas al inicio de la Memoria de
-   * Cálculo — mismas capturas que usa la hoja de Plano. No se fuerza la
-   * creación del visor 3D aquí (evita el costo de iniciar WebGL) si el
-   * usuario nunca lo abrió en esta sesión. */
-  _visualizerImagesHtml() {
-    let imgPlanta = '', imgArmadura = '';
-    try { imgPlanta = this.renderer.captureSnapshot('plan'); } catch (e) { /* no disponible */ }
-    try { imgArmadura = this.renderer.captureSnapshot('rebar'); } catch (e) { /* no disponible */ }
-    let img3D = '';
-    if (this.renderer3D) {
-      try { img3D = this.renderer3D.captureSnapshot(); } catch (e) { /* no disponible */ }
-    }
-    const panel = (title, img) => (img ? `
-      <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
-        <div class="bg-slate-100 text-[10px] font-bold text-slate-600 uppercase tracking-wide px-2 py-1 border-b border-slate-200">${title}</div>
-        <img src="${img}" alt="${title}" class="w-full block">
-      </div>` : '');
-    const panels = [panel('Planta', imgPlanta), panel('Detalle de Armado', imgArmadura), panel('Isométrico 3D', img3D)].filter(Boolean);
-    if (!panels.length) return '';
-    return `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">${panels.join('')}</div>`;
-  }
 
   /** Vista en Sección (corte), con las flechas de llamada del acero ya
    * dibujadas en el propio canvas (_drawSectionRebarIsolated) — embebida
@@ -1454,7 +1433,6 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA AISLADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
-    html += this._visualizerImagesHtml();
 
     html += this._datosDisenoIsoladaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoIsoladaHtml(d, fnd, mat, geo);
@@ -1472,7 +1450,6 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA COMBINADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
-    html += this._visualizerImagesHtml();
 
     html += this._sectionTitle('1. Datos de Entrada');
     html += this._table(['Parámetro', 'Valor'], [
@@ -1829,7 +1806,6 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA CONECTADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
-    html += this._visualizerImagesHtml();
 
     html += this._datosDisenoConectadaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoConectadaHtml(d, fnd, mat, geo);
