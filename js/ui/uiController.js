@@ -946,7 +946,6 @@ export class AppUIController {
       <p class="text-xs font-bold text-amber-800 mb-1.5">⚠️ Sin Estudio de Mecánica de Suelos (EMS) — Recomendaciones Técnicas</p>
       <p class="text-xs text-amber-700 mb-2">La capacidad portante admisible (q_adm) usada en este cálculo es solo un valor referencial/conservador, sin verificación de campo. Se recomienda:</p>
       <ul class="text-xs text-amber-700 list-disc list-inside space-y-1">
-        <li>Ejecutar el EMS conforme a la NTP E.050 (calicatas o SPT hasta 1.5–2 veces el ancho de la cimentación bajo el nivel de desplante) antes de la construcción definitiva.</li>
         <li>Si se detecta suelo de baja capacidad (relleno, material orgánico, arcilla expansiva o arena suelta): subexcavación y reemplazo con material granular seleccionado, compactado en capas ≤ 0.30 m al 95% de la Máxima Densidad Seca (Proctor Modificado).</li>
         <li>En suelos finos plásticos: estabilización química con cal o cemento para reducir el índice de plasticidad y mejorar la resistencia al corte.</li>
         <li>En suelos cohesivos saturados: precarga con drenes verticales (mechas drenantes) para acelerar la consolidación.</li>
