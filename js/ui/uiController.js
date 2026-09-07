@@ -1981,11 +1981,6 @@ export class AppUIController {
         html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ Requiere acero de arranque (dowels) adicional con As ≥ ${ap.As_dowel_cm2.toFixed(2)} cm².</p>`;
       }
     });
-    html += this._table(['', 'Valor'], [
-      ['Longitud de desarrollo requerida (ld)', `${str.development.ld_req_cm.toFixed(1)} cm`],
-      ['Longitud disponible, voladizo izquierdo', `${str.development.ld_avail_left_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_left)}`],
-      ['Longitud disponible, voladizo derecho', `${str.development.ld_avail_right_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_right)}`],
-    ]);
 
     html += this._isometricoImgHtml();
     html += this._soilStudyWarningHtml();
