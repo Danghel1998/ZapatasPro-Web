@@ -375,6 +375,29 @@ export class AppUIController {
     };
   }
 
+  /** L=c+a, B=c+b (proyección "c" hacia un solo lado en ambas direcciones
+   * — columna de esquina, sin volado hacia ninguno de los dos bordes de
+   * propiedad). */
+  _solveCornerLB(a, b, A_req) {
+    const disc = (a - b) * (a - b) + 4 * A_req;
+    const c = Math.max(0.05, Math.ceil(((-(a + b) + Math.sqrt(disc)) / 2) / 0.05) * 0.05);
+    return {
+      L: Math.ceil((c + a) / 0.05) * 0.05,
+      B: Math.ceil((c + b) / 0.05) * 0.05,
+    };
+  }
+
+  /** Elige la fórmula de proporcionamiento L,B según el tipo de columna
+   * (mismo criterio que deriveColumnEccentricity en isolatedFooting.js):
+   * interior → volado simétrico en ambas direcciones; medianera → un solo
+   * lado en L (cara al ras del borde), simétrico en B; esquinera → un
+   * solo lado en ambas direcciones (al ras de los dos bordes). */
+  _solveLBByColType(colType, a, b, A_req) {
+    if (colType === 'esquinera') return this._solveCornerLB(a, b, A_req);
+    if (colType === 'medianera') return this._solveEdgeLB(a, b, A_req);
+    return this._solveCenteredLB(a, b, A_req);
+  }
+
   /**
    * Predimensionamiento de zapata combinada: L se fija para que el
    * centroide de la zapata coincida con la resultante de cargas de
@@ -452,9 +475,10 @@ export class AppUIController {
    * Predimensionamiento de zapata aislada — hoja de cálculo de referencia
    * (Efrén, "ZAPATA TIPO 1.xlsx"): área tentativa A = P(1+fz)/q_adm (sin
    * iterar con el peso propio real — el factor "fz" ya lo aproxima), y
-   * reparto del mismo volado "c" alrededor de la columna en ambas
-   * direcciones (L = 2c + col_L, B = 2c + col_B) para que L×B cubra esa
-   * área.
+   * reparto del volado "c" según el tipo de columna — simétrico en ambas
+   * direcciones si es interior, hacia un solo lado en L si es
+   * medianera/borde, y hacia un solo lado en ambas direcciones si es
+   * esquinera (ver _solveLBByColType) — para que L×B cubra esa área.
    */
   predimensionIsolated() {
     const { isolated, foundation } = this.data;
@@ -464,7 +488,7 @@ export class AppUIController {
     const qAdmTnm2 = (foundation.q_adm_kgcm2 || 1) * 10;
     const A_req = (P * (1 + fz)) / qAdmTnm2;
 
-    const { L, B } = this._solveCenteredLB(isolated.col_L, isolated.col_B, A_req);
+    const { L, B } = this._solveLBByColType(isolated.col_type, isolated.col_L, isolated.col_B, A_req);
     isolated.L = Math.round(L * 100) / 100;
     isolated.B = Math.round(B * 100) / 100;
     this.syncFormWithData();
@@ -977,13 +1001,16 @@ export class AppUIController {
   }
 
   /**
-   * Boceto en planta del predimensionamiento (zapata Lp×Bp, columna a×b
-   * centrada, volado "c" repartido por igual en las 4 direcciones) — SVG
-   * propio, con la misma paleta y convención de cotas del visualizador
+   * Boceto en planta del predimensionamiento (zapata Lp×Bp, columna a×b) —
+   * SVG propio, con la misma paleta y convención de cotas del visualizador
    * (footingCanvas.js, paleta clara), en vez de reproducir literalmente el
-   * dibujo de la hoja de cálculo de referencia.
+   * dibujo de la hoja de cálculo de referencia. La columna se dibuja
+   * centrada si es interior, al ras del borde derecho si es
+   * medianera/borde, y al ras de los bordes derecho e inferior si es
+   * esquinera — mismo criterio que deriveColumnEccentricity
+   * (isolatedFooting.js) y _solveLBByColType.
    */
-  _predimSketchSvg(Lp, Bp, a, b, cRound) {
+  _predimSketchSvg(Lp, Bp, a, b, cRound, colType) {
     const vw = 260, vh = 190;
     const top = 22, right = 30;
     const availW = vw - right - 14, availH = vh - top - 14;
@@ -991,7 +1018,10 @@ export class AppUIController {
     const w = Lp * scale, h = Bp * scale;
     const x0 = 14, y0 = top;
     const cw = a * scale, ch = b * scale;
-    const cx0 = x0 + (w - cw) / 2, cy0 = y0 + (h - ch) / 2;
+    const flushX = colType === 'medianera' || colType === 'esquinera';
+    const flushY = colType === 'esquinera';
+    const cx0 = flushX ? (x0 + w - cw) : (x0 + (w - cw) / 2);
+    const cy0 = flushY ? (y0 + h - ch) : (y0 + (h - ch) / 2);
     const fillFooting = '#e7ebf1', strokeFooting = '#334155';
     const fillCol = '#94a3b8', strokeCol = '#1e293b';
     const dim = '#64748b', text = '#334155';
@@ -1029,26 +1059,45 @@ export class AppUIController {
    */
   _predimensionamientoIsoladaHtml(d, fnd, mat, geo) {
     const a = d.col_L, b = d.col_B;
+    const colType = d.col_type || 'interior';
     const P = (d.Pd || 0) + (d.Pl || 0);
     const fz = d.fz ?? 0.08;
     const qAdmTnm2 = (fnd.q_adm_kgcm2 || 1) * 10;
     const A_req = (P * (1 + fz)) / qAdmTnm2;
 
-    const disc = (a - b) * (a - b) + 4 * A_req;
-    const cRaw = (-(a + b) + Math.sqrt(disc)) / 4;
+    // Fórmula de proporcionamiento L,B según el tipo de columna (mismo
+    // criterio que deriveColumnEccentricity y _solveLBByColType): interior
+    // → volado "c" simétrico en ambas direcciones; medianera → un solo
+    // lado en L (cara al ras del borde), simétrico en B; esquinera → un
+    // solo lado en ambas direcciones.
+    let cRaw, formulaLB;
+    if (colType === 'esquinera') {
+      const disc = (a - b) * (a - b) + 4 * A_req;
+      cRaw = (-(a + b) + Math.sqrt(disc)) / 2;
+      formulaLB = 'L = c + b, B = c + t';
+    } else if (colType === 'medianera') {
+      const disc = (2 * a + b) * (2 * a + b) - 8 * (a * b - A_req);
+      cRaw = (-(2 * a + b) + Math.sqrt(disc)) / 4;
+      formulaLB = 'L = c + b, B = 2c + t';
+    } else {
+      const disc = (a - b) * (a - b) + 4 * A_req;
+      cRaw = (-(a + b) + Math.sqrt(disc)) / 4;
+      formulaLB = 'L = 2c + b, B = 2c + t';
+    }
     const cRound = Math.max(0.05, Math.ceil(cRaw / 0.05) * 0.05);
-    const Lp = 2 * cRound + a, Bp = 2 * cRound + b;
+    const Lp = colType === 'interior' ? 2 * cRound + a : cRound + a;
+    const Bp = colType === 'esquinera' ? cRound + b : 2 * cRound + b;
 
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1°) Verificamos por cargas de gravedad</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Área tentativa: A = P(1+fz) / q_adm, con fz = ${fz.toFixed(2)} como aproximación del peso propio. Volado "c" repartido por igual alrededor de la columna en ambas direcciones (L = 2c + b, B = 2c + t).</p>
+      <p class="text-[11px] text-slate-500 mb-2">Área tentativa: A = P(1+fz) / q_adm, con fz = ${fz.toFixed(2)} como aproximación del peso propio. Volado "c" repartido según el tipo de columna (${formulaLB}).</p>
       <table class="text-xs w-full mb-2">
         ${this._specRow('Carga en servicio (P = CM+CV)', `${this._trimNum(P)} Ton`)}
         ${this._specRow('Área tentativa (A)', `${A_req.toFixed(2)} m²`)}
         ${this._specRow('Volado calculado (c)', `${cRaw.toFixed(2)} m`)}
         ${this._specRow('Volado redondeado (c)', `${cRound.toFixed(2)} m`)}
       </table>
-      <div class="flex justify-center mb-2">${this._predimSketchSvg(Lp, Bp, a, b, cRound)}</div>
+      <div class="flex justify-center mb-2">${this._predimSketchSvg(Lp, Bp, a, b, cRound, colType)}</div>
       <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones predimensionadas: L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>`;
 
     let step2Html = '';
