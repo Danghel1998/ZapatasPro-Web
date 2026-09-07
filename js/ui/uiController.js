@@ -66,6 +66,7 @@ export class AppUIController {
     this.bindButtonEvents();
     this.syncFormWithData();
     this.updateFootingTypeVisibility();
+    this.updateSoilStudyVisibility();
     this.renderer.resizeCanvas();
     const label = document.getElementById('punit_label');
     const badge = document.getElementById('q_adm_unit_badge');
@@ -122,6 +123,7 @@ export class AppUIController {
     target[lastKey] = val;
 
     if (bindPath === 'footing_type') this.updateFootingTypeVisibility();
+    if (bindPath === 'foundation.has_soil_study') this.updateSoilStudyVisibility();
 
     const syncName = element.getAttribute('data-sync');
     if (syncName) {
@@ -162,6 +164,14 @@ export class AppUIController {
         b.classList.toggle('text-slate-700', !active);
       });
     }
+  }
+
+  /** Muestra/oculta la recomendación de mejoramiento de suelos según si el
+   * proyecto cuenta con Estudio de Mecánica de Suelos (foundation.has_soil_study)
+   * — puramente informativo, no afecta ningún cálculo. */
+  updateSoilStudyVisibility() {
+    const el = document.getElementById('soil_study_warning');
+    if (el) el.classList.toggle('hidden', this.data.foundation.has_soil_study !== 'no');
   }
 
   bindButtonEvents() {
@@ -253,6 +263,7 @@ export class AppUIController {
           const activeBtn = document.querySelector(`[data-footing-type="${this.data.footing_type}"]`);
           if (activeBtn) activeBtn.click();
           this.updateFootingTypeVisibility();
+          this.updateSoilStudyVisibility();
           this.recalculateAndRender();
         }
       });

@@ -452,12 +452,29 @@
               <span class="text-[10px] text-orange-700 font-semibold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200">Estudio de Suelos</span>
             </div>
             <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>¿Estudio de Mecánica de Suelos (EMS)?</span></label>
+                <select class="eng-raw-input w-28 px-2 py-1 text-xs font-mono border border-slate-300 rounded bg-white" data-bind="foundation.has_soil_study">
+                  <option value="si">Sí</option>
+                  <option value="no">No</option>
+                </select></div>
               <div class="eng-input-group"><label class="eng-label"><span>Peso específico</span><span class="eng-symbol">(γs)</span></label>
                 <div class="eng-cell-wrapper"><input type="number" step="10" min="1200" max="2200" class="eng-cell-input" data-bind="foundation.gamma_kgm3"><span class="eng-unit-badge">kg/m³</span></div></div>
               <div class="eng-input-group"><label class="eng-label"><span>Ángulo de fricción (ref.)</span><span class="eng-symbol">(φ)</span></label>
                 <div class="eng-cell-wrapper"><input type="number" step="0.5" min="15" max="45" class="eng-cell-input" data-bind="foundation.phi"><span class="eng-unit-badge">°</span></div></div>
               <div class="eng-input-group"><label class="eng-label font-bold text-slate-900"><span>Capacidad portante admisible</span><span class="eng-symbol text-amber-700">(q_adm)</span></label>
                 <div class="eng-cell-wrapper eng-cell-yellow-wrapper"><input type="number" step="0.1" min="0.3" max="10" class="eng-cell-input font-bold" data-bind="foundation.q_adm_kgcm2"><span class="eng-unit-badge" id="q_adm_unit_badge">kg/cm²</span></div></div>
+              <div id="soil_study_warning" class="hidden mt-1 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
+                <p class="font-bold mb-1">⚠️ Sin EMS — q_adm es solo un valor referencial/conservador. Recomendaciones técnicas:</p>
+                <ul class="list-disc list-inside space-y-0.5">
+                  <li>Ejecutar el EMS conforme a la NTP E.050 (calicatas o SPT hasta 1.5–2 veces el ancho de la cimentación bajo el nivel de desplante) antes de la construcción definitiva.</li>
+                  <li>Si se detecta suelo de baja capacidad (relleno, material orgánico, arcilla expansiva o arena suelta): subexcavación y reemplazo con material granular seleccionado, compactado en capas ≤ 0.30 m al 95% de la Máxima Densidad Seca (Proctor Modificado).</li>
+                  <li>En suelos finos plásticos: estabilización química con cal o cemento para reducir el índice de plasticidad y mejorar la resistencia al corte.</li>
+                  <li>En suelos cohesivos saturados: precarga con drenes verticales (mechas drenantes) para acelerar la consolidación.</li>
+                  <li>En arenas sueltas susceptibles a licuación: compactación dinámica, vibrocompactación o columnas de grava.</li>
+                  <li>Reforzar la base de la cimentación con geomallas o geotextiles para redistribuir esfuerzos sobre suelos blandos.</li>
+                  <li>Si el mejoramiento superficial no basta, profundizar el desplante (Df) hasta un estrato competente.</li>
+                </ul>
+              </div>
             </div>
           </div>
 

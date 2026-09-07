@@ -155,6 +155,10 @@ export const DEFAULT_FOOTING_DATA = {
     gamma_kgm3: 1800.0,   // peso específico del suelo (kg/m³)
     phi: 30.0,            // ángulo de fricción interna (°), referencial
     q_adm_kgcm2: 1.20,    // capacidad portante admisible del estudio de suelos (kg/cm²), a la profundidad Df — hoja de referencia Efrén
+    // 'si' | 'no' — si no hay Estudio de Mecánica de Suelos (EMS), la app
+    // muestra una recomendación técnica de mejoramiento de suelos (ver
+    // updateSoilStudyVisibility en uiController.js); no afecta el cálculo.
+    has_soil_study: 'si',
   },
 
   materials: {
