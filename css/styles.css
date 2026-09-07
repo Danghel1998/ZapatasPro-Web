@@ -171,7 +171,8 @@ code, pre, .font-mono {
     margin: 2.2cm 1.8cm 1.8cm 1.8cm;
   }
 
-  html, body {
+  html, body,
+  html.dark, html.dark body {
     background-color: #ffffff !important;
     color: #000000 !important;
   }
@@ -198,6 +199,23 @@ code, pre, .font-mono {
   #kpi_punching,
   .tab-nav-header {
     display: none !important;
+  }
+
+  /* Refuerzo: "header"/"aside" usan position:sticky en pantalla — algunos
+     controladores de impresión de terceros (p.ej. PDF-XChange, en vez del
+     "Guardar como PDF" nativo del navegador) no siempre respetan
+     display:none en elementos sticky/fixed y dejan una franja visible del
+     fondo oscuro del tema oscuro en la parte superior de la hoja. Se fija
+     la posición y el fondo explícitamente, con la misma especificidad que
+     usa html.dark, como red de seguridad adicional. */
+  html.dark header,
+  html.dark aside {
+    display: none !important;
+    position: static !important;
+    background: transparent !important;
+  }
+  header, aside {
+    position: static !important;
   }
 
   /* Oculta cualquier pestaña que no sea la Memoria, sin importar cuál
