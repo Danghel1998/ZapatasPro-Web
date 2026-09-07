@@ -1189,7 +1189,8 @@ export class AppUIController {
         ${this._specRow('Volado redondeado (c)', `${cRound.toFixed(2)} m`)}
       </table>
       <div class="flex justify-center mb-2">${this._predimSketchSvg(Lp, Bp, a, b, cRound, colType)}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones predimensionadas: L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>`;
+      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones sugeridas (a partir de las cargas): L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Geometría"): L = ${d.L.toFixed(2)} m &nbsp; B = ${d.B.toFixed(2)} m ${Math.abs(d.L - Lp) > 0.001 || Math.abs(d.B - Bp) > 0.001 ? '— distintas de la sugerencia' : '— igual a la sugerencia'}</p>`;
 
     let step2Html = '';
     if (geo.hasSeismic && geo.seismic_envelope) {
@@ -1629,7 +1630,8 @@ export class AppUIController {
         ${this._specRow('Área tentativa (A)', `${A_req.toFixed(2)} m²`)}
       </table>
       <div class="flex justify-center mb-2">${this._combinedPredimSketchSvg(Lp, Bp, a1, d.col1_L, d.col1_B, a2, d.col2_L, d.col2_B)}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones predimensionadas: L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>
+      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones sugeridas (a partir de las cargas): L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Geometría"): L = ${d.L.toFixed(2)} m &nbsp; B = ${d.B.toFixed(2)} m ${Math.abs(d.L - Lp) > 0.001 || Math.abs(d.B - Bp) > 0.001 ? '— distintas de la sugerencia' : '— igual a la sugerencia'}</p>
       <table class="text-xs w-full mt-2">
         ${this._specRow('Volado x1 (izquierdo)', `${x1.toFixed(2)} m`)}
         ${this._specRow('Volado x2 (derecho)', `${x2.toFixed(2)} m`)}
@@ -2130,7 +2132,8 @@ export class AppUIController {
         ${this._specRow('Volado redondeado (c)', `${c1Round.toFixed(2)} m`)}
       </table>
       <div class="flex justify-center mb-2">${this._predimSketchSvg(L1p, B1p, d.col1_L, d.col1_B, c1Round, 'medianera')}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 1 predimensionada: L1 = ${L1p.toFixed(2)} m &nbsp; B1 = ${B1p.toFixed(2)} m</p>`;
+      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 1 sugerida (a partir de las cargas): L1 = ${L1p.toFixed(2)} m &nbsp; B1 = ${B1p.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Zapata 1"): L1 = ${d.L1.toFixed(2)} m &nbsp; B1 = ${d.B1.toFixed(2)} m</p>`;
 
     // 2°) R1, R2 — método de la viga rígida, con la geometría YA VIGENTE
     // (d.L1, no la tentativa L1p) para mostrar el estado actual real.
@@ -2167,7 +2170,8 @@ export class AppUIController {
         ${this._specRow('Volado redondeado (c)', `${c2Round.toFixed(2)} m`)}
       </table>
       <div class="flex justify-center mb-2">${this._predimSketchSvg(L2p, B2p, d.col2_L, d.col2_B, c2Round, 'interior')}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 2 predimensionada: L2 = ${L2p.toFixed(2)} m &nbsp; B2 = ${B2p.toFixed(2)} m</p>`;
+      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 2 sugerida (a partir de las cargas): L2 = ${L2p.toFixed(2)} m &nbsp; B2 = ${B2p.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Zapata 2"): L2 = ${d.L2.toFixed(2)} m &nbsp; B2 = ${d.B2.toFixed(2)} m</p>`;
 
     // 4°) Verificación de la presión de contacto de servicio, con la
     // geometría VIGENTE (d.L1/B1/L2/B2) — reutiliza geo (calculateConnectedBearing).
