@@ -656,7 +656,7 @@ export class FootingCanvasRenderer {
 
   drawCombinedElevation(width, height) {
     const ctx = this.ctx;
-    const { combined } = this.footingData;
+    const { combined, materials } = this.footingData;
     const { L, h, col1_L, col2_L, a1, s, Df } = combined;
     const a2 = a1 + s;
     const stemH = 0.8;
@@ -684,6 +684,9 @@ export class FootingCanvasRenderer {
     });
     ctx.restore();
 
+    const str = this.structResults;
+    if (str) this._drawSectionRebarCombined(ctx, t, str, materials.cover_footing, L, h, a1, col1_L, a2, col2_L, stemH);
+
     ctx.save();
     ctx.strokeStyle = p.groundLine;
     ctx.setLineDash([5, 3]);
@@ -691,7 +694,106 @@ export class FootingCanvasRenderer {
     ctx.setLineDash([]);
     ctx.restore();
 
+    // Cotas: largo total, volados (borde a cara de columna) y separación
+    // entre ejes de columna — todas por debajo de la zapata para no
+    // cruzarse con el armado dibujado arriba.
     this._dimLine(ctx, t.toX(0), t.toY(0), t.toX(L), t.toY(0), `L = ${L.toFixed(2)} m`, 26);
+    const x1f = a1 - col1_L / 2, x2f = a2 + col2_L / 2;
+    if (x1f > 1e-6) this._dimLine(ctx, t.toX(0), t.toY(0), t.toX(x1f), t.toY(0), `Volado izq. = ${x1f.toFixed(2)} m`, 48);
+    if (L - x2f > 1e-6) this._dimLine(ctx, t.toX(x2f), t.toY(0), t.toX(L), t.toY(0), `Volado der. = ${(L - x2f).toFixed(2)} m`, 48);
+    this._dimLine(ctx, t.toX(a1), t.toY(0), t.toX(a2), t.toY(0), `s (entre ejes) = ${s.toFixed(2)} m`, 70);
+  }
+
+  /**
+   * Armadura en la vista de Sección (corte longitudinal a lo largo de L) de
+   * la zapata combinada: acero longitudinal inferior (str.bottom, línea
+   * azul con ganchos, capa inferior) y superior (str.top, línea roja
+   * punteada, capa superior — momento negativo entre columnas), ambos de
+   * perfil por correr a lo largo de L, igual que en la zapata aislada.
+   * El acero transversal de cada columna (str.trans1/trans2, corre a lo
+   * largo de B) se ve "de frente" como un grupo de círculos bajo cada
+   * columna. Las esperas/arranque de cada columna se dibujan igual que en
+   * la zapata aislada (_drawSectionRebarIsolated).
+   */
+  _drawSectionRebarCombined(ctx, t, str, cover, L, h, a1, col1_L, a2, col2_L, stemH) {
+    const dbMain = str.dbMain, dbTrans = str.dbTrans;
+    const rMain = dbMain.diameter_m / 2, rTrans = dbTrans.diameter_m / 2;
+    const hook = hookMainBar_m(dbMain.diameter_m);
+
+    const yBottomMain = cover + rMain;
+    const yBottomTrans = yBottomMain + 2 * rMain;
+    const yTopMain = h - cover - rMain;
+
+    // --- Acero longitudinal inferior (str.bottom): línea azul, ganchos 90° hacia arriba en ambos extremos ---
+    const runL0 = cover + rMain, runL1 = L - cover - rMain;
+    const xB0 = t.toX(runL0), xB1 = t.toX(runL1);
+    const yBot = t.toY(yBottomMain);
+    const hookPx = hook * t.scale;
+    ctx.save();
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(xB0, yBot); ctx.lineTo(xB1, yBot); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xB0, yBot); ctx.lineTo(xB0, yBot - hookPx); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xB1, yBot); ctx.lineTo(xB1, yBot - hookPx); ctx.stroke();
+    ctx.restore();
+
+    // --- Acero longitudinal superior (str.top): línea roja punteada, capa superior ---
+    const yTop = t.toY(yTopMain);
+    ctx.save();
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 4]);
+    ctx.beginPath(); ctx.moveTo(xB0, yTop); ctx.lineTo(xB1, yTop); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // --- Acero transversal bajo cada columna (str.trans1/trans2): grupo de círculos naranjas ---
+    const drawTransGroup = (xc, colL) => {
+      const half = Math.max(colL / 2, 0.15);
+      const n = 5;
+      ctx.save();
+      ctx.fillStyle = '#f97316';
+      ctx.strokeStyle = '#9a3412';
+      for (let i = 0; i < n; i++) {
+        const dx = -half + (2 * half * i) / (n - 1);
+        ctx.beginPath();
+        ctx.arc(t.toX(xc + dx), t.toY(yBottomTrans), Math.max(2.2, rTrans * t.scale), 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    };
+    drawTransGroup(a1, col1_L);
+    drawTransGroup(a2, col2_L);
+
+    // --- Esperas/arranque de columna: 2 barras visibles por columna, con gancho de 90° hacia el interior ---
+    const dowelDepth = Math.max(yBottomMain, yBottomTrans);
+    const yDowelBot = t.toY(dowelDepth);
+    [[a1, col1_L], [a2, col2_L]].forEach(([xc, cl]) => {
+      const yDowelTop = t.toY(h + stemH - cover);
+      ctx.save();
+      ctx.strokeStyle = '#16a34a';
+      ctx.lineWidth = 1.8;
+      [1, -1].forEach((sign) => {
+        const dx = xc + sign * (cl / 2 - cover);
+        const xPix = t.toX(dx);
+        ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix, yDowelTop); ctx.stroke();
+        const hookPxDowel = hook * t.scale * 0.5;
+        ctx.beginPath(); ctx.moveTo(xPix, yDowelBot); ctx.lineTo(xPix - sign * hookPxDowel, yDowelBot); ctx.stroke();
+      });
+      ctx.restore();
+    });
+
+    ctx.save();
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillStyle = '#2563eb';
+    ctx.fillText(`Línea azul: Ø ${dbMain.inches} inferior @ ${str.bottom.spacing} cm (gancho 90° = ${(hook * 100).toFixed(0)} cm)`, 10, 18);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillText(`Línea roja punteada: Ø ${dbMain.inches} superior @ ${str.top.spacing} cm`, 10, 34);
+    ctx.fillStyle = '#f97316';
+    ctx.fillText(`Círculos naranjas: Ø ${dbTrans.inches} transversal @ ${str.trans1.spacing} / ${str.trans2.spacing} cm`, 10, 50);
+    ctx.fillStyle = '#16a34a';
+    ctx.fillText(`Verde: esperas/arranque de columna`, 10, 66);
+    ctx.restore();
   }
 
   // ===================================================================
