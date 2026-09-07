@@ -747,29 +747,38 @@ export class FootingCanvasRenderer {
     ctx.setLineDash([]);
     ctx.restore();
 
-    // --- Acero transversal bajo cada columna (str.trans1/trans2): grupo de
-    // círculos naranjas — recortado al recubrimiento real de la losa
-    // (nunca más allá de [cover+rTrans, L−cover−rTrans]), para columnas al
-    // ras o casi al ras del borde (medianera) donde el ancho de grupo fijo
-    // "±max(colL/2, 0.15)" se saldría del concreto. ---
-    const xTransMin = cover + rTrans, xTransMax = L - cover - rTrans;
-    const drawTransGroup = (xc, colL) => {
-      const half = Math.max(colL / 2, 0.15);
-      const n = 5;
+    // --- Acero transversal (str.trans1/trans2): distribución real —
+    // franja de reparto desde el borde de la zapata más cercano hasta el
+    // punto medio entre ejes de columna (igual criterio que
+    // calculateCombinedRebarSchedule y el Detalle 3D), no un grupo
+    // esquemático — en ambas capas (inferior, junto a la línea azul, y
+    // superior, junto a la línea roja), recortada siempre dentro de
+    // [cover+rTrans, L−cover−rTrans].
+    const yTopTrans = yTopMain - 2 * rMain;
+    const xMid = (a1 + a2) / 2;
+    const positionsBetween = (spacingCm, x0, x1) => {
+      const sp = Math.max(0.03, (spacingCm || 20) / 100);
+      const list = [];
+      for (let p = x0 + sp / 2; p <= x1 - sp / 2 + 1e-6; p += sp) list.push(p);
+      return list.length ? list : [(x0 + x1) / 2];
+    };
+    const drawTransRow = (xPositions, yDepth) => {
       ctx.save();
       ctx.fillStyle = '#f97316';
       ctx.strokeStyle = '#9a3412';
-      for (let i = 0; i < n; i++) {
-        const dx = -half + (2 * half * i) / (n - 1);
-        const xPos = Math.min(xTransMax, Math.max(xTransMin, xc + dx));
+      xPositions.forEach((x) => {
         ctx.beginPath();
-        ctx.arc(t.toX(xPos), t.toY(yBottomTrans), Math.max(2.2, rTrans * t.scale), 0, Math.PI * 2);
+        ctx.arc(t.toX(x), t.toY(yDepth), Math.max(2.2, rTrans * t.scale), 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
-      }
+      });
       ctx.restore();
     };
-    drawTransGroup(a1, col1_L);
-    drawTransGroup(a2, col2_L);
+    const trans1Xs = positionsBetween(str.trans1.spacing, cover, Math.min(xMid, L - cover));
+    const trans2Xs = positionsBetween(str.trans2.spacing, Math.max(xMid, cover), L - cover);
+    drawTransRow(trans1Xs, yBottomTrans);
+    drawTransRow(trans2Xs, yBottomTrans);
+    drawTransRow(trans1Xs, yTopTrans);
+    drawTransRow(trans2Xs, yTopTrans);
 
     // --- Esperas/arranque de columna: 2 barras visibles por columna, con gancho de 90° hacia el interior ---
     const dowelDepth = Math.max(yBottomMain, yBottomTrans);
