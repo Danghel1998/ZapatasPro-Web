@@ -271,14 +271,20 @@ export function calculateCombinedStructural(footingData) {
   // -------------------------------------------------------------------
   // 6. ACERO TRANSVERSAL (sentido B) bajo cada columna — voladizo local,
   //    con la presión de diseño gobernante "su" (uniforme) — mismo
-  //    criterio que la hoja de referencia (F212).
+  //    criterio que la hoja de referencia (F212). Incluye el corte en una
+  //    dirección transversal (por metro de longitud), Vu = su·(voladizo −
+  //    d) — mismo criterio que la hoja de referencia (B190).
   // -------------------------------------------------------------------
   function transverseForColumn(colB) {
     const voladizo = (B - colB) / 2.0;
     const Mu = su * voladizo * voladizo / 2.0; // por metro de longitud (kN·m/m)
     const flex = calcRequiredRebar(Mu, fc, fy, 1.0, d, PHI_FLEX, h);
     const spacing = calcSpacing(flex.As_design, dbTrans.area_cm2);
-    return { voladizo, q_local: su, Mu, flex, spacing };
+    const Vu_y = Math.max(0, su * (voladizo - d)); // kN/m
+    const Vc_y = oneWayShearCapacity_kN(fc_kgcm2, 1.0, d);
+    const phiVc_y = PHI_SHEAR * Vc_y;
+    const shearY = { Vu: Vu_y, Vc: Vc_y, phiVc: phiVc_y, pass: Vu_y <= phiVc_y };
+    return { voladizo, q_local: su, Mu, flex, spacing, shearY };
   }
   const trans1 = transverseForColumn(col1_B);
   const trans2 = transverseForColumn(col2_B);
@@ -325,6 +331,7 @@ export function calculateCombinedStructural(footingData) {
     development: { ld_req_cm, ld_avail_left_cm, ld_avail_right_cm, pass_ld_left, pass_ld_right },
     fc, fy, fc_kgcm2, fy_kgcm2,
     pass_all_structural: pass_shear_oneWay && punch1.pass && punch2.pass
+      && trans1.shearY.pass && trans2.shearY.pass
       && aplastamiento1.pass && aplastamiento2.pass && pass_ld_left && pass_ld_right,
   };
 }

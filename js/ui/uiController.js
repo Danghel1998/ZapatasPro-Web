@@ -408,7 +408,11 @@ export class AppUIController {
     const My2 = (combined.My2_d || 0) + (combined.My2_l || 0);
 
     const x_R = combined.a1 + (P2 * combined.s + My1 + My2) / (P1 + P2);
-    const L = Math.ceil((2 * x_R) / 0.05) * 0.05;
+    // L debe cubrir el centroide (2x̄, zapata centrada) Y, como a1/s ya
+    // fijan la posición del eje de la columna 2, alcanzar al menos hasta
+    // su cara derecha — si no, la columna 2 quedaría fuera de la zapata.
+    const a2 = combined.a1 + combined.s;
+    const L = Math.ceil(Math.max(2 * x_R, a2 + combined.col2_L / 2) / 0.05) * 0.05;
     const A_req = (P1 + P2) * (1 + fz) / qAdmTnm2;
     const B = Math.ceil((A_req / L) / 0.05) * 0.05;
 
@@ -948,6 +952,20 @@ export class AppUIController {
     </div>`;
   }
 
+  /** Diagrama de Fuerza Cortante V(x) y Momento Flector M(x) de la losa
+   * (tratada como "viga invertida" en la dirección L) — captura del mismo
+   * canvas del visualizador ("Diagramas V y M"), embebido en el paso
+   * "3) Diseño por cortante" de la zapata combinada/conectada. */
+  _diagramaVMImgHtml() {
+    let img = '';
+    try { img = this.renderer.captureSnapshot('diagram'); } catch (e) { /* no disponible */ }
+    if (!img) return '';
+    return `<div class="border border-slate-200 rounded-lg overflow-hidden bg-white mb-2">
+      <div class="bg-slate-100 text-[10px] font-bold text-slate-600 uppercase tracking-wide px-2 py-1 border-b border-slate-200">Diagrama de Fuerza Cortante y Momento Flector — Combinación gobernante</div>
+      <img src="${img}" alt="Diagrama V y M" class="w-full block">
+    </div>`;
+  }
+
   /** Fila "etiqueta = valor" para los mini-cuadros de especificaciones. */
   _specRow(label, val) {
     return `<tr><td class="py-0.5 pr-3 text-slate-600">${label} =</td><td class="py-0.5 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">${val}</td></tr>`;
@@ -1075,6 +1093,46 @@ export class AppUIController {
       <text x="${(x0 + cx0) / 2}" y="${cy0 + ch / 2 - 4}" font-size="8.5" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">${cLabel}</text>
       <line x1="${cx0 + cw / 2}" y1="${y0}" x2="${cx0 + cw / 2}" y2="${cy0}" stroke="${dim}" stroke-width="1" stroke-dasharray="2,2"/>
       <text x="${cx0 + cw / 2 + 4}" y="${(y0 + cy0) / 2 + 3}" font-size="8.5" fill="${text}" font-family="Inter, sans-serif">${cLabel}</text>
+    </svg>`;
+  }
+
+  /**
+   * Boceto en planta del predimensionamiento de una zapata COMBINADA
+   * (2 columnas): footing Lp×Bp, columna 1 (b1×t1) en x=a1, columna 2
+   * (b2×t2) en x=a2, con los 4 voladizos (x1 izquierdo, x2 derecho, y1/y2
+   * transversales) acotados — mismo estilo y paleta que _predimSketchSvg.
+   */
+  _combinedPredimSketchSvg(Lp, Bp, a1, col1_L, col1_B, a2, col2_L, col2_B) {
+    const vw = 300, vh = 190;
+    const top = 22, right = 30, left = 14;
+    const availW = vw - right - left, availH = vh - top - 14;
+    const scale = Math.min(availW / Lp, availH / Bp);
+    const w = Lp * scale, h = Bp * scale;
+    const x0 = left, y0 = top;
+    const fillFooting = '#e7ebf1', strokeFooting = '#334155';
+    const fillCol = '#94a3b8', strokeCol = '#1e293b';
+    const dim = '#64748b', text = '#334155';
+
+    const colRect = (xc, cl, cb) => {
+      const cw = cl * scale, ch = cb * scale;
+      const cx = x0 + xc * scale - cw / 2, cy = y0 + (h - ch) / 2;
+      return `<rect x="${cx}" y="${cy}" width="${cw}" height="${ch}" fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.2"/>`;
+    };
+
+    return `<svg viewBox="0 0 ${vw} ${vh}" width="300" height="190" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+      <rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${fillFooting}" stroke="${strokeFooting}" stroke-width="1.5"/>
+      ${colRect(a1, col1_L, col1_B)}
+      ${colRect(a2, col2_L, col2_B)}
+      <line x1="${x0}" y1="${y0 - 10}" x2="${x0 + w}" y2="${y0 - 10}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0}" y1="${y0 - 14}" x2="${x0}" y2="${y0 - 6}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0 + w}" y1="${y0 - 14}" x2="${x0 + w}" y2="${y0 - 6}" stroke="${dim}" stroke-width="1"/>
+      <text x="${x0 + w / 2}" y="${y0 - 13}" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">L = ${Lp.toFixed(2)} m</text>
+      <line x1="${x0 + w + 10}" y1="${y0}" x2="${x0 + w + 10}" y2="${y0 + h}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0 + w + 6}" y1="${y0}" x2="${x0 + w + 14}" y2="${y0}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0 + w + 6}" y1="${y0 + h}" x2="${x0 + w + 14}" y2="${y0 + h}" stroke="${dim}" stroke-width="1"/>
+      <text x="0" y="0" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif" transform="translate(${x0 + w + 22} ${y0 + h / 2}) rotate(-90)">B = ${Bp.toFixed(2)} m</text>
+      <text x="${x0 + a1 * scale}" y="${y0 + h + 14}" font-size="8.5" fill="${strokeCol}" text-anchor="middle" font-family="Inter, sans-serif">C1</text>
+      <text x="${x0 + a2 * scale}" y="${y0 + h + 14}" font-size="8.5" fill="${strokeCol}" text-anchor="middle" font-family="Inter, sans-serif">C2</text>
     </svg>`;
   }
 
@@ -1466,6 +1524,384 @@ export class AppUIController {
     </div>`;
   }
 
+  /** Caja "I) DATOS DE DISEÑO" de la zapata combinada — mismo formato que
+   * _datosDisenoConectadaHtml (columna 1 medianera + columna 2 interior). */
+  _datosDisenoCombinadaHtml(d, fnd, mat, hasSeismic) {
+    const specsHtml = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Especificaciones del proyecto</h4>
+      <table class="text-xs w-full mb-3">
+        ${this._specRow(`Resistencia del concreto (f'c)`, `${mat.fc_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('Resistencia del acero (fy)', `${mat.fy_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('Prof. de desplante (Df)', `${d.Df.toFixed(2)} m`)}
+        ${this._specRow('Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2))}
+        ${this._specRow('Peso específico del suelo (γs)', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`)}
+        ${this._specRow('Distancia entre ejes de columna', `${d.s.toFixed(2)} m`)}
+      </table>
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Sección de Columna 1 (medianera)</h4>
+      <table class="text-xs w-full mb-3">
+        ${this._specRow('Ancho de columna (b1)', `${d.col1_L.toFixed(2)} m`)}
+        ${this._specRow('Peralte de columna (t1)', `${d.col1_B.toFixed(2)} m`)}
+      </table>
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Sección de Columna 2 (interior)</h4>
+      <table class="text-xs w-full">
+        ${this._specRow('Ancho de columna (b2)', `${d.col2_L.toFixed(2)} m`)}
+        ${this._specRow('Peralte de columna (t2)', `${d.col2_B.toFixed(2)} m`)}
+      </table>`;
+
+    const loadsBlock = (label, Pd, Pl, Mxd, Mxl, Myd, Myl, Psx, Mxsx, Mysx, Psy, Mxsy, Mysy) => {
+      const row = (l, P, Mx, My) => `<tr class="odd:bg-sky-50">
+        <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${l}</td>
+        <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(P)}</td>
+        <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mx)}</td>
+        <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(My)}</td>
+      </tr>`;
+      return `
+        <h4 class="text-xs font-bold text-slate-700 mb-1">Cargas en servicio — ${label}</h4>
+        <table class="text-xs w-full border-collapse mb-3">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100"></th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">P (Ton)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Mx (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">My (Ton-m)</th>
+          </tr></thead>
+          <tbody>
+            ${row('CM', Pd, Mxd, Myd)}
+            ${row('CV', Pl, Mxl, Myl)}
+            ${hasSeismic ? row('SXD', Psx, Mxsx, Mysx) : ''}
+            ${hasSeismic ? row('SYD', Psy, Mxsy, Mysy) : ''}
+          </tbody>
+        </table>`;
+    };
+    const loadsHtml = loadsBlock('Columna 1', d.P1d, d.P1l, d.Mx1_d, d.Mx1_l, d.My1_d, d.My1_l, d.Psx1, d.Mx1_sx, d.My1_sx, d.Psy1, d.Mx1_sy, d.My1_sy)
+      + loadsBlock('Columna 2', d.P2d, d.P2l, d.Mx2_d, d.Mx2_l, d.My2_d, d.My2_l, d.Psx2, d.Mx2_sx, d.My2_sx, d.Psy2, d.Mx2_sy, d.My2_sy)
+      + `<p class="text-[10px] text-slate-500 mt-1 leading-snug">
+        <span class="font-semibold">CM</span>: Carga Muerta ·
+        <span class="font-semibold">CV</span>: Carga Viva
+        ${hasSeismic ? ` · <span class="font-semibold">SXD</span>: Sismo en dirección X · <span class="font-semibold">SYD</span>: Sismo en dirección Y` : ''} ·
+        <span class="font-semibold">P</span>: carga axial ·
+        <span class="font-semibold">Mx</span>: momento transversal (dirección B) ·
+        <span class="font-semibold">My</span>: momento longitudinal (dirección L)
+      </p>`;
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">I) DATOS DE DISEÑO</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-3">
+        <div>${specsHtml}</div>
+        <div>${loadsHtml}</div>
+      </div>
+    </div>`;
+  }
+
+  /**
+   * Caja "II) PREDIMENSIONAMIENTO" de la zapata combinada, al estilo de la
+   * hoja de cálculo de referencia (Efrén — "ZAPATA COMBINADA.xlsx"): 1°)
+   * centroide de cargas de gravedad llevadas hacia la columna 1 y área
+   * tentativa; 2°) verificación con sismo (4 esquinas, trapezoidal +
+   * rectangular equivalente); 3°) resumen final con la geometría vigente.
+   */
+  _predimensionamientoCombinadaHtml(d, fnd, mat, geo) {
+    const fz = d.fz ?? 0.1;
+    const qAdmTnm2 = (fnd.q_adm_kgcm2 || 1) * 10;
+    const P1 = (d.P1d || 0) + (d.P1l || 0), P2 = (d.P2d || 0) + (d.P2l || 0);
+    const M1 = (d.My1_d || 0) + (d.My1_l || 0), M2 = (d.My2_d || 0) + (d.My2_l || 0);
+    const a1 = d.a1, s = d.s, a2 = a1 + s;
+
+    const x_R = a1 + (P2 * s + M1 + M2) / (P1 + P2);
+    // L debe cubrir el centroide (2x̄, zapata centrada) Y, como a1/s ya
+    // fijan la posición del eje de la columna 2, alcanzar al menos hasta
+    // su cara derecha — si no, la columna 2 quedaría fuera de la zapata.
+    const Lp = Math.ceil(Math.max(2 * x_R, a2 + d.col2_L / 2) / 0.05) * 0.05;
+    const A_req = (P1 + P2) * (1 + fz) / qAdmTnm2;
+    const Bp = Math.ceil((A_req / Lp) / 0.05) * 0.05;
+    const x1 = Math.max(0, a1 - d.col1_L / 2), x2 = Math.max(0, Lp - (a2 + d.col2_L / 2));
+    const y1 = (Bp - d.col1_B) / 2, y2 = (Bp - d.col2_B) / 2;
+
+    const step1Html = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">1°) Verificamos por cargas de gravedad más momentos</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Centroide de cargas (llevadas hacia la columna 1): x̄ = a1 + (P2·l + M1 + M2)/(P1+P2), medido desde el borde izquierdo, con "l" la distancia entre ejes de columna. L = 2x̄ (zapata centrada en la resultante, excentricidad nula). Área tentativa: A = (P1+P2)(1+fz)/q_adm, con fz = ${fz.toFixed(2)}.</p>
+      <table class="text-xs w-full mb-2">
+        ${this._specRow('P1 (CM+CV)', `${this._trimNum(P1)} Ton`)}
+        ${this._specRow('P2 (CM+CV)', `${this._trimNum(P2)} Ton`)}
+        ${this._specRow('M1 (My, propio)', `${this._trimNum(M1)} Ton-m`)}
+        ${this._specRow('M2 (My, propio)', `${this._trimNum(M2)} Ton-m`)}
+        ${this._specRow('l (distancia entre ejes)', `${s.toFixed(2)} m`)}
+        ${this._specRow('x̄ (centroide, desde borde izq.)', `${x_R.toFixed(2)} m`)}
+        ${this._specRow('Área tentativa (A)', `${A_req.toFixed(2)} m²`)}
+      </table>
+      <div class="flex justify-center mb-2">${this._combinedPredimSketchSvg(Lp, Bp, a1, d.col1_L, d.col1_B, a2, d.col2_L, d.col2_B)}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones predimensionadas: L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>
+      <table class="text-xs w-full mt-2">
+        ${this._specRow('Volado x1 (izquierdo)', `${x1.toFixed(2)} m`)}
+        ${this._specRow('Volado x2 (derecho)', `${x2.toFixed(2)} m`)}
+        ${this._specRow('Volado y1 (bajo columna 1)', `${y1.toFixed(2)} m`)}
+        ${this._specRow('Volado y2 (bajo columna 2)', `${y2.toFixed(2)} m`)}
+      </table>`;
+
+    let step2Html = '';
+    if (geo.hasSeismic && geo.seismic_envelope) {
+      const factor = d.seismic_bearing_factor || 1.25;
+      const rows = geo.seismic_envelope.rows;
+      const MxGrav = (d.Mx1_d || 0) + (d.Mx1_l || 0) + (d.Mx2_d || 0) + (d.Mx2_l || 0);
+      const seisOf = (label) => {
+        if (label === 'CM+CV') return [0, 0, 0];
+        if (label.includes('SXD')) return [(d.Psx1 || 0) + (d.Psx2 || 0), (d.Mx1_sx || 0) + (d.Mx2_sx || 0), (d.My1_sx || 0) + (d.My2_sx || 0)];
+        return [(d.Psy1 || 0) + (d.Psy2 || 0), (d.Mx1_sy || 0) + (d.Mx2_sy || 0), (d.My1_sy || 0) + (d.My2_sy || 0)];
+      };
+      const loadsRows = rows.map((r) => {
+        const [Ps, Mxs, Mys] = seisOf(r.label);
+        return `<tr class="odd:bg-sky-50">
+          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(P1 + P2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(MxGrav)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(M1 + M2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Ps)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mxs)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mys)}</td>
+        </tr>`;
+      }).join('');
+
+      const pressureRows = rows.map((r) => {
+        const [s1, s2, s3, s4] = [r.corners.c, r.corners.d, r.corners.b, r.corners.e].map(kpaToKgcm2);
+        const sx = r.rect ? `${kpaToKgcm2(r.rect.qx).toFixed(2)}` : '—';
+        const sy = r.rect ? `${kpaToKgcm2(r.rect.qy).toFixed(2)}` : '—';
+        return `<tr class="odd:bg-sky-50">
+          <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s1.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s2.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s3.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${s4.toFixed(2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${sx}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${sy}</td>
+          <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(r.pass)}</td>
+        </tr>`;
+      }).join('');
+
+      step2Html = `
+        <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2°) Verificamos por cargas de gravedad más momentos y sismo</h4>
+        <p class="text-[11px] text-slate-500 mb-2">σadm = ${this._p(fnd.q_adm_kgcm2)} &nbsp; σadm(sismo) = ${this._p(fnd.q_adm_kgcm2 * factor)} (factor × ${factor.toFixed(2)}). σ = N/(B·L) ± 6·My_L/(B·L²) ± 6·Mx_B/(L·B²), con N = R(1+fz) y My_L incluyendo el momento propio de cada columna más el brazo de su posición respecto al centro de la zapata; si alguna esquina resulta en tracción, se usa la distribución rectangular equivalente σx, σy.</p>
+        <div class="overflow-x-auto">
+        <table class="text-xs w-full border-collapse mb-2">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" rowspan="2"></th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="3">Cargas de gravedad</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="3">Cargas de sismo</th>
+          </tr><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">P (Ton)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Mx (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">My (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">P (Ton)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Mx (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">My (Ton-m)</th>
+          </tr></thead>
+          <tbody>${loadsRows}</tbody>
+        </table>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="text-xs w-full border-collapse">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" rowspan="2"></th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="4">Distribución trapezoidal (kg/cm²)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" colspan="2">Distribución rectangular (kg/cm²)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100" rowspan="2">Estado</th>
+          </tr><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ1</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ2</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ3</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ4</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σx</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">σy</th>
+          </tr></thead>
+          <tbody>${pressureRows}</tbody>
+        </table>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-1">Con la geometría vigente (L = ${d.L.toFixed(2)} m, B = ${d.B.toFixed(2)} m), la envolvente sísmica de servicio: ${this._estadoCell(geo.seismic_envelope.pass)}.</p>`;
+    }
+
+    const geoRow = (label, val, limit, pass) => `<tr class="odd:bg-sky-50">
+      <td class="border border-slate-300 px-2 py-1 font-semibold">${label}</td>
+      <td class="border border-slate-300 px-2 py-1 text-right font-mono">${val}</td>
+      <td class="border border-slate-300 px-2 py-1 text-right">${limit}</td>
+      <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(pass)}</td>
+    </tr>`;
+    const a2c = d.a1 + d.s;
+    const x1c = Math.max(0, d.a1 - d.col1_L / 2), x2c = Math.max(0, d.L - (a2c + d.col2_L / 2));
+    const y1c = (d.B - d.col1_B) / 2, y2c = (d.B - d.col2_B) / 2;
+    let step3Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3°) Verificación geotécnica (geometría vigente)</h4>
+      <table class="text-xs w-full border-collapse mb-2">
+        <thead><tr>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Verificación</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Resultado</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Límite</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Estado</th>
+        </tr></thead>
+        <tbody>
+          ${geoRow('Excentricidad longitudinal e', `${(geo.e * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.e_max * 100).toFixed(2)} cm`, geo.within_kern)}
+          ${geoRow(`Presión máxima de contacto q_max${geo.hasSeismic ? ' (sin sismo)' : ''}`, this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)}
+        </tbody>
+      </table>`;
+    if (geo.effective_note) step3Html += `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ ${geo.effective_note}</p>`;
+    step3Html += `
+      <p class="text-[11px] text-slate-500 mb-1">Como las presiones ejercidas sobre el terreno son menores al esfuerzo admisible, se adoptan las siguientes dimensiones:</p>
+      <table class="text-xs w-full">
+        ${this._specRow('Volado x1 (izquierdo)', `${x1c.toFixed(2)} m`)}
+        ${this._specRow('Volado x2 (derecho)', `${x2c.toFixed(2)} m`)}
+        ${this._specRow('Volado y1 (bajo columna 1)', `${y1c.toFixed(2)} m`)}
+        ${this._specRow('Volado y2 (bajo columna 2)', `${y2c.toFixed(2)} m`)}
+        ${this._specRow('L (adoptado)', `${d.L.toFixed(2)} m`)}
+        ${this._specRow('B (adoptado)', `${d.B.toFixed(2)} m`)}
+      </table>`;
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">II) PREDIMENSIONAMIENTO</div>
+      <div class="p-3">${step1Html}${step2Html}${step3Html}</div>
+    </div>`;
+  }
+
+  /**
+   * Caja "III) DISEÑO" de la zapata combinada: 1) combinaciones de diseño
+   * (ya calculadas en str.envelope), 2) punzonamiento por columna (con
+   * perímetro recortado automáticamente por borde), 3) corte — dirección X
+   * (longitudinal, diagrama de la losa como "viga invertida") y dirección
+   * Y (transversal, por columna) — y 4) flexión en ambas direcciones,
+   * terminando con el acero finalmente elegido.
+   */
+  _disenoCombinadaHtml(d, str) {
+    const step1Html = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">1) Combinaciones de diseño</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de toda la losa para cada una (con el peso propio aproximado por el factor fz). La más desfavorable de todas se toma como la presión de diseño "su", aplicada de forma uniforme sobre toda la zapata para punzonamiento y las franjas en voladizo transversal.</p>
+      <table class="text-xs w-full border-collapse mb-2">
+        <thead><tr>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ (esquina más desfavorable)</th>
+        </tr></thead>
+        <tbody>
+          ${str.envelope.rows.map((r) => `<tr class="odd:bg-sky-50 ${r.label === str.envelope.governingRow.label ? 'font-bold' : ''}">
+            <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}${r.label === str.envelope.governingRow.label ? ' ⟵ gobierna' : ''}</td>
+            <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="grid grid-cols-2 gap-2">
+        ${this._statCard('Combinación gobernante', str.envelope.governingRow.label, null, null)}
+        ${this._statCard('su — presión de diseño', this._p(str.envelope.su_kgcm2, 3), 'uniforme sobre toda la zapata', null)}
+      </div>`;
+
+    const punchFormulas = this._formulaBox([
+      `β = ${this._frac('Lado mayor columna', 'Lado menor columna')}`,
+      `A₀, b₀ — recortados a d/2 del borde real de la losa en cada lado (medianera/interior/esquinera, según corresponda)`,
+      `Vu = su·(Área total − A₀)`,
+      `Vc₁ = 0.53(1 + ${this._frac('2', 'β')})√f'c·b₀·d`,
+      `Vc₂ = 0.27(${this._frac('αs·d', 'b₀')} + 2)√f'c·b₀·d`,
+      `Vc₃ = 1.06√f'c·b₀·d`,
+    ]);
+    const punchCol = (label, p) => `
+      <h5 class="text-[11px] font-bold text-slate-600 mt-3 mb-1">${label} — ${p.colType} (αs = ${p.alphaS})</h5>
+      <div class="grid grid-cols-2 gap-2 mb-1">
+        ${this._statCard('Vu (cortante actuante)', `${knToKg(p.Vu).toFixed(0)} kg`, null, null)}
+        ${this._statCard('φVc (resistencia)', `${knToKg(p.phiVc).toFixed(0)} kg`, null, null)}
+      </div>
+      <table class="text-xs w-full mb-1">
+        ${this._specRow('Ao', `${p.areaWithin.toFixed(2)} m²`)}
+        ${this._specRow('bo', `${p.bo.toFixed(2)} m`)}
+        ${this._specRow('β', p.betaC.toFixed(2))}
+        ${this._specRow('Vc (mín. de las 3)', `${knToKg(p.Vc).toFixed(0)} kg`)}
+      </table>
+      <p class="text-xs font-semibold">Verificación Vu ≤ φVc: ${this._estadoCell(p.pass)}</p>`;
+    const step2Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2) Diseño por punzonamiento (corte en dos direcciones)</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Verifica que el concreto resista el corte que cada columna "punzona" a través del peralte de la zapata, en un perímetro crítico ubicado a d/2 de sus caras — recortado automáticamente donde ese perímetro cae fuera del borde real de la losa (columna 1, medianera). El cortante actuante se toma de forma conservadora como su·(Área total − Área crítica), igual que la hoja de referencia.</p>
+      ${str.perimetersOverlap ? `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ Los perímetros críticos de ambas columnas se traslapan (separación libre ${str.halfGapAvailable.toFixed(2)} m &lt; d = ${str.d_main.toFixed(2)} m) — se recomienda un análisis conjunto del perímetro combinado.</p>` : ''}
+      <div class="flex flex-col md:flex-row gap-4 items-start">
+        <div class="w-full md:flex-1">${punchFormulas}${punchCol('Columna 1', str.punch1)}${punchCol('Columna 2', str.punch2)}</div>
+        <div class="flex justify-center w-full md:w-auto">${this._punchingSketchSvg()}</div>
+      </div>`;
+
+    const shearXFormulas = this._formulaBox([`La losa se analiza como "viga invertida" de ancho B: reacción distribuida hacia arriba + cargas puntuales de columna hacia abajo, en equilibrio exacto para cada combinación factorada — se muestra el diagrama de la combinación gobernante y la envolvente (máximo) entre todas.`]);
+    const step3Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3) Diseño por cortante</h4>
+      <h5 class="text-[11px] font-bold text-slate-600 mb-1">Dirección X (longitudinal)</h5>
+      ${shearXFormulas}
+      ${this._diagramaVMImgHtml()}
+      <table class="text-xs w-full border-collapse mb-2">
+        <thead><tr>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Sección crítica (a "d" de la cara)</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Vu</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">φVc</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Estado</th>
+        </tr></thead>
+        <tbody>
+          ${str.shearChecks.map((c) => `<tr class="odd:bg-sky-50">
+            <td class="border border-slate-300 px-2 py-1">${c.label}</td>
+            <td class="border border-slate-300 px-2 py-1 text-right font-mono">${knToKg(c.Vu).toFixed(0)} kg</td>
+            <td class="border border-slate-300 px-2 py-1 text-right font-mono">${knToKg(str.phiVc_oneWay).toFixed(0)} kg</td>
+            <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(c.pass)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <h5 class="text-[11px] font-bold text-slate-600 mt-3 mb-1">Dirección Y (transversal, por metro de longitud)</h5>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+        ${[['Columna 1', str.trans1], ['Columna 2', str.trans2]].map(([label, t]) => `
+          <div>
+            <h6 class="text-[11px] font-semibold text-slate-600 mb-1">${label} — voladizo ${t.voladizo.toFixed(2)} m</h6>
+            <div class="grid grid-cols-2 gap-2 mb-1">
+              ${this._statCard('Vu', `${knToKg(t.shearY.Vu).toFixed(0)} kg/m`, null, null)}
+              ${this._statCard('φVc', `${knToKg(t.shearY.phiVc).toFixed(0)} kg/m`, null, null)}
+            </div>
+            <p class="text-xs font-semibold">Verificación Vu ≤ φVc: ${this._estadoCell(t.shearY.pass)}</p>
+          </div>`).join('')}
+      </div>`;
+
+    const flexFormulas = this._formulaBox([
+      `a = d − √(d² − ${this._frac('2Mu', "φ·0.85·f'c·b")})`,
+      `As = ${this._frac('Mu', `φ·fy·(d − a/2)`)}`,
+    ]);
+    const step4Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">4) Diseño por flexión</h4>
+      <h5 class="text-[11px] font-bold text-slate-600 mb-1">Dirección X (longitudinal, ancho B) — momento del diagrama envolvente (ver paso 3)</h5>
+      ${flexFormulas}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 mb-2">
+        <div>
+          <h6 class="text-[11px] font-semibold text-slate-600 mb-1">Momento negativo (superior, entre columnas)</h6>
+          <div class="grid grid-cols-2 gap-2 mb-1">
+            ${this._statCard('Mu', `${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m`, `en x = ${str.x_neg.toFixed(2)} m`, null)}
+            ${this._statCard('As requerido', `${str.top.As_design.toFixed(2)} cm²`, `${str.top.As_per_m.toFixed(2)} cm²/m`, null)}
+          </div>
+        </div>
+        <div>
+          <h6 class="text-[11px] font-semibold text-slate-600 mb-1">Momento positivo (inferior, voladizos)</h6>
+          <div class="grid grid-cols-2 gap-2 mb-1">
+            ${this._statCard('Mu', `${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m`, `en x = ${str.x_pos.toFixed(2)} m`, null)}
+            ${this._statCard('As requerido', `${str.bottom.As_design.toFixed(2)} cm²`, `${str.bottom.As_per_m.toFixed(2)} cm²/m`, null)}
+          </div>
+        </div>
+      </div>
+      <h5 class="text-[11px] font-bold text-slate-600 mt-3 mb-1">Dirección Y (transversal, bajo cada columna, por metro de longitud)</h5>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+        ${[['Columna 1', str.trans1], ['Columna 2', str.trans2]].map(([label, t]) => `
+          <div>
+            <h6 class="text-[11px] font-semibold text-slate-600 mb-1">${label}</h6>
+            <div class="grid grid-cols-2 gap-2 mb-1">
+              ${this._statCard('Mu', `${kNmToKgm(t.Mu).toFixed(0)} kg·m/m`, null, null)}
+              ${this._statCard('As requerido', `${t.flex.As_design.toFixed(2)} cm²/m`, null, null)}
+            </div>
+          </div>`).join('')}
+      </div>
+      <h5 class="text-xs font-bold text-slate-700 mt-3 mb-1.5">🔩 Acero a colocar</h5>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+        ${this._statCard('Longitudinal inferior (voladizos)', `${str.dbMain.name}`, `@ ${str.bottom.spacing} cm — ${str.bottom.As_per_m.toFixed(2)} cm²/m`, true)}
+        ${this._statCard('Longitudinal superior (entre columnas)', `${str.dbMain.name}`, `@ ${str.top.spacing} cm — ${str.top.As_per_m.toFixed(2)} cm²/m`, true)}
+        ${this._statCard('Transversal — Columna 1', `${str.dbTrans.name}`, `@ ${str.trans1.spacing} cm`, true)}
+        ${this._statCard('Transversal — Columna 2', `${str.dbTrans.name}`, `@ ${str.trans2.spacing} cm`, true)}
+      </div>
+      ${this._seccionArmadoImgHtml()}`;
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">III) DISEÑO</div>
+      <div class="p-3">${step1Html}${step2Html}${step3Html}${step4Html}</div>
+    </div>`;
+  }
+
   _reportIsolated() {
     const d = this.data.isolated, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
@@ -1493,91 +1929,18 @@ export class AppUIController {
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
 
-    html += this._sectionTitle('1. Datos de Entrada');
-    html += this._table(['Parámetro', 'Valor'], [
-      ['Dimensiones (L × B)', `${d.L.toFixed(2)} × ${d.B.toFixed(2)} m`],
-      ['Peralte total (h)', `${d.h.toFixed(2)} m`],
-      ['Posición Columna 1 (a1) / Columna 2 (a1+s)', `${d.a1.toFixed(2)} m / ${(d.a1 + d.s).toFixed(2)} m`],
-      ['Columna 1 (col1_L × col1_B)', `${d.col1_L.toFixed(2)} × ${d.col1_B.toFixed(2)} m`],
-      ['Columna 2 (col2_L × col2_B)', `${d.col2_L.toFixed(2)} × ${d.col2_B.toFixed(2)} m`],
-      ['Carga de servicio Columna 1 (D/L)', `${d.P1d.toFixed(2)} / ${d.P1l.toFixed(2)} tn`],
-      ['Momento Mx / My Columna 1 (D+L)', `${((d.Mx1_d || 0) + (d.Mx1_l || 0)).toFixed(3)} / ${((d.My1_d || 0) + (d.My1_l || 0)).toFixed(3)} tn·m`],
-      ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(2)} / ${d.P2l.toFixed(2)} tn`],
-      ['Momento Mx / My Columna 2 (D+L)', `${((d.Mx2_d || 0) + (d.Mx2_l || 0)).toFixed(3)} / ${((d.My2_d || 0) + (d.My2_l || 0)).toFixed(3)} tn·m`],
-      ['Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2)],
-      [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
-      ['Factor de peso propio (fz)', d.fz.toFixed(2)],
-    ]);
-    if (geo.hasSeismic) {
-      html += this._table(['Sismo por columna', 'P', 'Mx', 'My'], [
-        ['Columna 1 — SXD', `${(d.Psx1 || 0).toFixed(2)} tn`, `${(d.Mx1_sx || 0).toFixed(3)} tn·m`, `${(d.My1_sx || 0).toFixed(3)} tn·m`],
-        ['Columna 1 — SYD', `${(d.Psy1 || 0).toFixed(2)} tn`, `${(d.Mx1_sy || 0).toFixed(3)} tn·m`, `${(d.My1_sy || 0).toFixed(3)} tn·m`],
-        ['Columna 2 — SXD', `${(d.Psx2 || 0).toFixed(2)} tn`, `${(d.Mx2_sx || 0).toFixed(3)} tn·m`, `${(d.My2_sx || 0).toFixed(3)} tn·m`],
-        ['Columna 2 — SYD', `${(d.Psy2 || 0).toFixed(2)} tn`, `${(d.Mx2_sy || 0).toFixed(3)} tn·m`, `${(d.My2_sy || 0).toFixed(3)} tn·m`],
-      ]);
-    }
+    html += this._datosDisenoCombinadaHtml(d, fnd, mat, geo.hasSeismic);
+    html += this._predimensionamientoCombinadaHtml(d, fnd, mat, geo);
+    html += this._disenoCombinadaHtml(d, str);
 
-    html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
-    html += `<p class="text-xs text-slate-600 mb-2">Presión de contacto biaxial: σ = N/(B·L) ± 6·My_L/(B·L²) ± 6·Mx_B/(L·B²), con N = R·(1+fz) (fz = ${geo.fz.toFixed(2)}), My_L = momento longitudinal total (propio de cada columna + brazo de su posición respecto al centro de la zapata) y Mx_B = momento transversal total (propio de cada columna). Excentricidad longitudinal e = My_L/R = ${(geo.e * 100).toFixed(2)} cm.</p>`;
-    html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
-      ['Excentricidad longitudinal e', `${(geo.e * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.e_max * 100).toFixed(2)} cm`, this._badgeHtml(geo.within_kern)],
-      [`Presión máxima de contacto q_max${geo.hasSeismic ? ' (sin sismo)' : ''}`, this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)],
-    ]);
-    if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
-    if (geo.hasSeismic) {
-      html += `<p class="text-xs text-slate-600 mb-2"><b>Envolvente sísmica de servicio</b> (CM+CV, CM+CV±SXD, CM+CV±SYD), limitada a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm:</p>`;
-      html += this._table(['Combinación', 'q (esquina más desfavorable)', 'Límite', 'Estado'],
-        geo.seismic_envelope.rows.map((r) => [r.label, `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`, `≤ ${this._p(r.limit_kgcm2)}`, this._badgeHtml(r.pass)]));
-      html += `<p class="text-xs text-slate-500 mb-3">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${this._p(geo.seismic_envelope.governing_q_kgcm2)}.</p>`;
-    }
+    html += this._sectionTitle('IV) Cuadro de Habilitación de Acero');
+    html += this._rebarTableHtml();
 
-    html += this._sectionTitle('3. Envolvente de Presión Factorada y Análisis Longitudinal');
-    const LF_D = this.data.safety_req.LF_D ?? 1.4, LF_L = this.data.safety_req.LF_L ?? 1.7;
-    html += `<p class="text-xs text-slate-600 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ` (U = ${LF_D}D + ${LF_L}L)`} — y se evalúa la presión de contacto biaxial de toda la losa para cada una. La más desfavorable se toma como la presión de diseño "su", aplicada de forma uniforme sobre toda la zapata para punzonamiento y las franjas en voladizo transversal.</p>`;
-    html += this._table(['Combinación', 'su (esquina más desfavorable)'],
-      str.envelope.rows.map((r) => [`${r.label}${r.label === str.envelope.governingRow.label ? ' ⟵ gobierna' : ''}`, `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`]));
-    html += `<p class="text-xs text-slate-600 mb-2">su = ${this._p(str.envelope.su_kgcm2, 3)}. Para el acero longitudinal y el corte en dirección L, la losa se analiza como "viga invertida" de ancho B (reacción distribuida hacia arriba, cargas puntuales de columna hacia abajo) para cada combinación factorada — envolvente: Pu1 = ${knToKg(str.Pu1).toFixed(0)} kg, Pu2 = ${knToKg(str.Pu2).toFixed(0)} kg. Momento máximo positivo (voladizos, tracción inferior) M+ = ${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m en x = ${str.x_pos.toFixed(2)} m. Momento máximo negativo (entre columnas, tracción superior) M− = ${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m en x = ${str.x_neg.toFixed(2)} m.</p>`;
-
-    html += this._sectionTitle('4. Acero Longitudinal Principal');
-    html += this._table(['', 'Inferior (M+)', 'Superior (M−)'], [
-      ['Momento de diseño', `${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m`, `${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m`],
-      ['Cuantía de diseño ρ', str.bottom.rho_design.toFixed(4), str.top.rho_design.toFixed(4)],
-      ['As requerido', `${str.bottom.As_design.toFixed(2)} cm² (${str.bottom.As_per_m.toFixed(2)} cm²/m)`, `${str.top.As_design.toFixed(2)} cm² (${str.top.As_per_m.toFixed(2)} cm²/m)`],
-      ['Armado colocado', `${str.dbMain.name} @ ${str.bottom.spacing} cm`, `${str.dbMain.name} @ ${str.top.spacing} cm`],
-    ]);
-
-    html += this._sectionTitle('5. Corte en Una Dirección');
-    html += this._table(['Sección crítica (a "d" de la cara)', 'Vu', 'φVc', 'Estado'], str.shearChecks.map(c => [c.label, `${knToKg(c.Vu).toFixed(0)} kg`, `${knToKg(str.phiVc_oneWay).toFixed(0)} kg`, this._badgeHtml(c.pass)]));
-
-    html += this._sectionTitle('6. Punzonamiento por Columna');
-    if (str.perimetersOverlap) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ Los perímetros críticos de punzonamiento de ambas columnas se traslapan (separación libre ${str.halfGapAvailable.toFixed(2)} m &lt; d = ${str.d_main.toFixed(2)} m) — se recomienda un análisis conjunto del perímetro combinado.</p>`;
-    [['Columna 1', str.punch1], ['Columna 2', str.punch2]].forEach(([label, p]) => {
-      html += this._table(['', label], [
-        ['Tipo de columna (según distancia al borde)', `${p.colType} (αs=${p.alphaS})`],
-        ['bo (perímetro crítico)', `${(p.bo * 100).toFixed(1)} cm`],
-        ['Vu = su·(Área total − Área crítica)', `${knToKg(p.Vu).toFixed(0)} kg`],
-        ['φVc', `${knToKg(p.phiVc).toFixed(0)} kg`],
-        ['Estado', this._badgeHtml(p.pass)],
-      ]);
-    });
-
-    html += this._sectionTitle('7. Acero Transversal Bajo Cada Columna');
-    html += this._table(['', 'Columna 1', 'Columna 2'], [
-      ['Voladizo transversal', `${str.trans1.voladizo.toFixed(3)} m`, `${str.trans2.voladizo.toFixed(3)} m`],
-      ['Presión de diseño (su, uniforme)', `${(str.trans1.q_local).toFixed(1)} kPa`, `${(str.trans2.q_local).toFixed(1)} kPa`],
-      ['Momento Mu', `${kNmToKgm(str.trans1.Mu).toFixed(0)} kg·m/m`, `${kNmToKgm(str.trans2.Mu).toFixed(0)} kg·m/m`],
-      ['As requerido', `${str.trans1.flex.As_design.toFixed(2)} cm²/m`, `${str.trans2.flex.As_design.toFixed(2)} cm²/m`],
-      ['Armado colocado', `${str.dbTrans.name} @ ${str.trans1.spacing} cm`, `${str.dbTrans.name} @ ${str.trans2.spacing} cm`],
-    ]);
-
-    html += this._sectionTitle('8. Longitud de Desarrollo en Tracción (E.060 25.4.2)');
-    html += this._table(['', 'Valor'], [
-      ['Longitud de desarrollo requerida (ld)', `${str.development.ld_req_cm.toFixed(1)} cm`],
-      ['Longitud disponible, voladizo izquierdo', `${str.development.ld_avail_left_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_left)}`],
-      ['Longitud disponible, voladizo derecho', `${str.development.ld_avail_right_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_right)}`],
-    ]);
-
-    html += this._sectionTitle('9. Aplastamiento Columna-Zapata (E.060 10.17 / ACI 318 22.8)');
+    // Aplastamiento columna-zapata (E.060 10.17 / ACI 318 22.8) — no forma
+    // parte de la hoja de referencia (ese cálculo no cubre esta
+    // verificación para zapata combinada), se agrega igual que en la
+    // zapata aislada/conectada como una verificación adicional.
+    html += this._sectionTitle('V) Aplastamiento Columna-Zapata (E.060 10.17 / ACI 318 22.8)');
     [['Columna 1', str.aplastamiento1, str.Pu1], ['Columna 2', str.aplastamiento2, str.Pu2]].forEach(([label, ap, Pu_i]) => {
       html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">${label}</h3>`;
       html += this._table(['', 'Valor'], [
@@ -1590,9 +1953,11 @@ export class AppUIController {
         html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ Requiere acero de arranque (dowels) adicional con As ≥ ${ap.As_dowel_cm2.toFixed(2)} cm².</p>`;
       }
     });
-
-    html += this._sectionTitle('10. Cuadro de Habilitación de Acero');
-    html += this._rebarTableHtml();
+    html += this._table(['', 'Valor'], [
+      ['Longitud de desarrollo requerida (ld)', `${str.development.ld_req_cm.toFixed(1)} cm`],
+      ['Longitud disponible, voladizo izquierdo', `${str.development.ld_avail_left_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_left)}`],
+      ['Longitud disponible, voladizo derecho', `${str.development.ld_avail_right_cm.toFixed(1)} cm — ${this._badgeHtml(str.development.pass_ld_right)}`],
+    ]);
 
     html += this._isometricoImgHtml();
     html += this._soilStudyWarningHtml();
