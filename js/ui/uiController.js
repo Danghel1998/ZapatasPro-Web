@@ -912,6 +912,27 @@ export class AppUIController {
     </div>`;
   }
 
+  /** Recomendación técnica de mejoramiento de suelos, al final de la
+   * Memoria de Cálculo, cuando el proyecto no cuenta con Estudio de
+   * Mecánica de Suelos (foundation.has_soil_study === 'no') — mismo
+   * contenido que el recuadro de la pestaña "Datos", puramente
+   * informativo. */
+  _soilStudyWarningHtml() {
+    if (this.data.foundation.has_soil_study !== 'no') return '';
+    return `<div class="border border-amber-300 bg-amber-50 rounded-lg p-3 mb-6">
+      <p class="text-xs font-bold text-amber-800 mb-1.5">⚠️ Sin Estudio de Mecánica de Suelos (EMS) — Recomendaciones Técnicas</p>
+      <p class="text-xs text-amber-700 mb-2">La capacidad portante admisible (q_adm) usada en este cálculo es solo un valor referencial/conservador, sin verificación de campo. Se recomienda:</p>
+      <ul class="text-xs text-amber-700 list-disc list-inside space-y-1">
+        <li>Ejecutar el EMS conforme a la NTP E.050 (calicatas o SPT hasta 1.5–2 veces el ancho de la cimentación bajo el nivel de desplante) antes de la construcción definitiva.</li>
+        <li>Si se detecta suelo de baja capacidad (relleno, material orgánico, arcilla expansiva o arena suelta): subexcavación y reemplazo con material granular seleccionado, compactado en capas ≤ 0.30 m al 95% de la Máxima Densidad Seca (Proctor Modificado).</li>
+        <li>En suelos finos plásticos: estabilización química con cal o cemento para reducir el índice de plasticidad y mejorar la resistencia al corte.</li>
+        <li>En suelos cohesivos saturados: precarga con drenes verticales (mechas drenantes) para acelerar la consolidación.</li>
+        <li>En arenas sueltas susceptibles a licuación: compactación dinámica, vibrocompactación o columnas de grava.</li>
+        <li>Reforzar la base de la cimentación con geomallas o geotextiles para redistribuir esfuerzos sobre suelos blandos.</li>
+        <li>Si el mejoramiento superficial no basta, profundizar el desplante (Df) hasta un estrato competente.</li>
+      </ul>
+    </div>`;
+  }
 
   /** Vista en Sección (corte), con las flechas de llamada del acero ya
    * dibujadas en el propio canvas (_drawSectionRebarIsolated) — embebida
@@ -1460,6 +1481,7 @@ export class AppUIController {
     html += this._rebarTableHtml();
 
     html += this._isometricoImgHtml();
+    html += this._soilStudyWarningHtml();
 
     return html;
   }
@@ -1573,6 +1595,7 @@ export class AppUIController {
     html += this._rebarTableHtml();
 
     html += this._isometricoImgHtml();
+    html += this._soilStudyWarningHtml();
 
     return html;
   }
@@ -1889,6 +1912,7 @@ export class AppUIController {
     html += this._rebarTableHtml();
 
     html += this._isometricoImgHtml();
+    html += this._soilStudyWarningHtml();
 
     return html;
   }
