@@ -192,10 +192,10 @@ code, pre, .font-mono {
   .no-print,
   .canvas-controls,
   #global_status_banner,
-  #kpi_overturning,
-  #kpi_sliding,
-  #kpi_eccentricity,
   #kpi_bearing,
+  #kpi_eccentricity,
+  #kpi_shear,
+  #kpi_punching,
   .tab-nav-header {
     display: none !important;
   }
