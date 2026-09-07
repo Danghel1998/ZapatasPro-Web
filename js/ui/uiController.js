@@ -1134,9 +1134,50 @@ export class AppUIController {
         <p class="text-[11px] text-slate-500 mt-1">Con la geometría vigente (L = ${d.L.toFixed(2)} m, B = ${d.B.toFixed(2)} m), la envolvente sísmica de servicio: ${this._estadoCell(geo.seismic_envelope.pass)}.</p>`;
     }
 
+    const geoRow = (label, val, limit, pass) => `<tr class="odd:bg-sky-50">
+      <td class="border border-slate-300 px-2 py-1 font-semibold">${label}</td>
+      <td class="border border-slate-300 px-2 py-1 text-right font-mono">${val}</td>
+      <td class="border border-slate-300 px-2 py-1 text-right">${limit}</td>
+      <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(pass)}</td>
+    </tr>`;
+    let step3Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3°) Verificación geotécnica (cargas de servicio)</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Peso propio estimado con el factor fz = ${geo.fz.toFixed(2)} (N = P·(1+fz)): ${geo.selfWeight_equiv_tn.toFixed(2)} tn. Carga total transmitida al suelo N = ${geo.N_tn.toFixed(2)} tn.</p>
+      <table class="text-xs w-full border-collapse mb-2">
+        <thead><tr>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Verificación</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Resultado</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Límite</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Estado</th>
+        </tr></thead>
+        <tbody>
+          ${geoRow('Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, Math.abs(geo.ex) <= geo.ex_max)}
+          ${geoRow('Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, Math.abs(geo.ey) <= geo.ey_max)}
+          ${geoRow('Presión máxima de contacto q_max (sin sismo)', this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)}
+        </tbody>
+      </table>`;
+    if (geo.effective_note) step3Html += `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ ${geo.effective_note}</p>`;
+
+    if (geo.hasSeismic) {
+      step3Html += `
+        <p class="text-[11px] text-slate-500 mb-2"><b>Envolvente sísmica de servicio:</b> σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para CM+CV, CM+CV±SXD y CM+CV±SYD. Al haber datos de sismo en el proyecto, las 5 combinaciones se limitan a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm.</p>
+        <table class="text-xs w-full border-collapse mb-2">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">q (esquina más desfavorable)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Límite admisible</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Estado</th>
+          </tr></thead>
+          <tbody>
+            ${geo.seismic_envelope.rows.map((r) => geoRow(r.label, `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`, `≤ ${this._p(r.limit_kgcm2)}`, r.pass)).join('')}
+          </tbody>
+        </table>
+        <p class="text-[11px] text-slate-500">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${this._p(geo.seismic_envelope.governing_q_kgcm2)}.</p>`;
+    }
+
     return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
       <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">II) PREDIMENSIONAMIENTO</div>
-      <div class="p-3">${step1Html}${step2Html}</div>
+      <div class="p-3">${step1Html}${step2Html}${step3Html}</div>
     </div>`;
   }
 
@@ -1151,39 +1192,18 @@ export class AppUIController {
     html += this._datosDisenoIsoladaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoIsoladaHtml(d, fnd, mat, geo);
 
-    html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
-    html += `<p class="text-xs text-slate-600 mb-2">Peso propio estimado con el factor fz = ${geo.fz.toFixed(2)} (N = P·(1+fz)): ${geo.selfWeight_equiv_tn.toFixed(2)} tn. Carga total transmitida al suelo N = ${geo.N_tn.toFixed(2)} tn.</p>`;
-    html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
-      ['Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ex) <= geo.ex_max)],
-      ['Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ey) <= geo.ey_max)],
-      ['Presión máxima de contacto q_max (sin sismo)', this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)],
-    ]);
-    if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
-
-    if (geo.hasSeismic) {
-      html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">2.1 Envolvente Sísmica (Cargas de Servicio)</h3>`;
-      html += `<p class="text-xs text-slate-600 mb-2">σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para CM+CV, CM+CV±SXD y CM+CV±SYD. Al haber datos de sismo en el proyecto, las 5 combinaciones se limitan a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm.</p>`;
-      html += this._table(['Combinación', 'q (esquina más desfavorable)', 'Límite admisible', 'Estado'], geo.seismic_envelope.rows.map((r) => [
-        r.label,
-        `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,
-        `≤ ${this._p(r.limit_kgcm2)}`,
-        this._badgeHtml(r.pass),
-      ]));
-      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${this._p(geo.seismic_envelope.governing_q_kgcm2)}.</p>`;
-    }
-
     {
-      html += this._sectionTitle(`3. Combinaciones de Diseño (Cargas Factoradas)`);
+      html += this._sectionTitle(`2. Combinaciones de Diseño (Cargas Factoradas)`);
       html += `<p class="text-xs text-slate-600 mb-2">Combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — aplicadas sobre la presión de contacto en las 4 esquinas de la zapata (con el peso propio aproximado por fz). La más desfavorable se toma como presión de diseño "su", aplicada de forma <b>uniforme</b> sobre toda la zapata para el diseño por punzonamiento, corte y flexión.</p>`;
       html += this._table(['Combinación', 'σ (esquina más desfavorable)'], str.envelope.rows.map((r) => [
         r.label,
         `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,
       ]));
       html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${str.envelope.governingRow.label}</b>. su = ${this._p(str.envelope.su_kgcm2, 3)} (presión de diseño uniforme).</p>`;
-      html += this._slabReportHtml(str, d.L, d.B, 4);
+      html += this._slabReportHtml(str, d.L, d.B, 3);
     }
 
-    html += this._sectionTitle('5. Cuadro de Habilitación de Acero');
+    html += this._sectionTitle('4. Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
 
     return html;
