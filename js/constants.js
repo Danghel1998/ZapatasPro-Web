@@ -233,6 +233,41 @@ export const PRESET_PROJECTS = {
       return d;
     })()
   },
+  zapata_combinada_z3: {
+    title: 'Zapata Combinada Z-3 — Casa Unifamiliar 3 Pisos',
+    desc: 'Proyecto real: "CASA UNIFAMILIAR 3 PISOS, MÁS TERRAZA" — propietario Crucenia Torres Silva, Jr. Fray Juan Ramírez Nro. 270 Mz. 32 Lt. 16. Zapata combinada Z-3, columna 1 medianera + columna 2 interior, con cargas de gravedad y sismo en X e Y (q_adm = 1.5 kg/cm²).',
+    data: (() => {
+      const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
+      d.footing_type = 'combinada';
+      d.foundation.q_adm_kgcm2 = 1.5;
+      d.combined = {
+        L: 2.4, B: 1.3, h: 0.6, a1: 0.75, s: 1.1,
+        col1_L: 0.3, col1_B: 0.3, col2_L: 0.3, col2_B: 0.25,
+        Df: 2.5,
+        P1d: 5.4148, P1l: 0.24,
+        Mx1_d: 0.0257, Mx1_l: 0.0082, My1_d: 0.0311, My1_l: 0.006,
+        Psx1: 0.2398, Mx1_sx: 0.0, My1_sx: 0.0353,
+        Psy1: 0.8145, Mx1_sy: 0.099, My1_sy: 0.0,
+        P2d: 13.667, P2l: 1.7,
+        Mx2_d: 0.2138, Mx2_l: 0.0217, My2_d: 0.0935, My2_l: 0.0217,
+        Psx2: 0.1986, Mx2_sx: 0.0, My2_sx: 0.0449,
+        Psy2: 11.1376, Mx2_sy: 0.3386, My2_sy: 0.0,
+        seismic_bearing_factor: 1.25,
+        fz: 0.1,
+      };
+      d.plano = {
+        proyecto: 'CASA UNIFAMILIAR 3 PISOS, MÁS TERRAZA',
+        propietario: 'CRUCENIA TORRES SILVA',
+        ubicacion: 'Jr. Fray Juan Ramírez Nro.:270 Mz.:32 Lt.: 16',
+        estructuras: 'Z-3 COMBINADA',
+        dibujado_por: '',
+        revisado_por: 'ING. J. EFREEN  OBLITAS BENAVIDES',
+        escala: 'Como se indica',
+        codigo: 'E-01',
+      };
+      return d;
+    })()
+  },
   zapata_conectada_tipica: {
     title: 'Zapata Conectada — Caso de Verificación (Efrén)',
     desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por viga de conexión — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA CONECTADA.xlsx".',
