@@ -227,6 +227,37 @@ export const PRESET_PROJECTS = {
       return d;
     })()
   },
+  zapata_aislada_z1: {
+    title: 'Zapata Aislada Z-1 — Casa Unifamiliar 3 Pisos',
+    desc: 'Proyecto real: "CASA UNIFAMILIAR 3 PISOS, MÁS TERRAZA" — propietario Crucenia Torres Silva, Jr. Fray Juan Ramírez Nro. 270 Mz. 32 Lt. 16. Zapata aislada Z-1, columna interior, con cargas de gravedad y sismo en X e Y (q_adm = 1.7 kg/cm²).',
+    data: (() => {
+      const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
+      d.footing_type = 'aislada';
+      d.foundation.q_adm_kgcm2 = 1.7;
+      d.foundation.has_soil_study = 'no';
+      d.isolated = {
+        L: 1.7, B: 1.5, h: 0.6, col_L: 0.3, col_B: 0.3, ex_col: 0, ey_col: 0, Df: 1.6,
+        Pd: 39.6452, Pl: 8.61,
+        Mx_d: 0.2106, Mx_l: 0.0524, My_d: 0.0097, My_l: 0.0003,
+        Psx: 0.091, Mx_sx: 0.0, My_sx: 0.0458,
+        Psy: 0.0916, Mx_sy: 0.0478, My_sy: 0.0,
+        seismic_bearing_factor: 1.25,
+        fz: 0.08,
+        col_type: 'interior',
+      };
+      d.plano = {
+        proyecto: 'CASA UNIFAMILIAR 3 PISOS, MÁS TERRAZA',
+        propietario: 'CRUCENIA TORRES SILVA',
+        ubicacion: 'Jr. Fray Juan Ramírez Nro.:270 Mz.:32 Lt.: 16',
+        estructuras: 'Z-1 AISLADA',
+        dibujado_por: '',
+        revisado_por: 'ING. J. EFREEN OBLITAS BENAVIDES',
+        escala: 'Como se indica',
+        codigo: 'E-01',
+      };
+      return d;
+    })()
+  },
   zapata_combinada_tipica: {
     title: 'Zapata Combinada — Caso de Verificación (Efrén)',
     desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por una losa rígida única — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA COMBINADA.xlsx".',
