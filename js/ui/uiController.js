@@ -290,6 +290,25 @@ export class AppUIController {
       printBtn.addEventListener('click', () => {
         const memoriaTab = document.querySelector('[data-main-tab="report_panel"]');
         if (memoriaTab) memoriaTab.click();
+        // header/aside usan position:sticky en pantalla — algunos navegadores
+        // no aplican display:none (vía @media print) de forma confiable a
+        // elementos sticky/fixed durante la paginación real de impresión, y
+        // deja visible una franja del fondo oscuro del tema en la parte
+        // superior de la hoja. Se ocultan por estilo en línea (máxima
+        // especificidad, no depende de @media print) justo antes de
+        // imprimir, y se restauran al terminar.
+        const header = document.querySelector('header');
+        const aside = document.querySelector('aside');
+        const prevHeaderDisplay = header ? header.style.display : '';
+        const prevAsideDisplay = aside ? aside.style.display : '';
+        if (header) header.style.display = 'none';
+        if (aside) aside.style.display = 'none';
+        const restore = () => {
+          if (header) header.style.display = prevHeaderDisplay;
+          if (aside) aside.style.display = prevAsideDisplay;
+          window.removeEventListener('afterprint', restore);
+        };
+        window.addEventListener('afterprint', restore);
         setTimeout(() => window.print(), 50);
       });
     }
