@@ -10,10 +10,12 @@
  * 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD) sobre la presión de contacto BIAXIAL
  * de TODA la losa (L×B) — igual método que la zapata aislada
  * (evaluateEnvelope/cornerPressures), con "My" (longitudinal, causa
- * gradiente en L) = suma de los momentos propios de cada columna en esa
- * dirección + el "brazo" de su posición respecto al centro de la zapata, y
- * "Mx" (transversal, causa gradiente en B) = suma de los momentos propios
- * (se asume ambas columnas centradas en B). Ese "su" gobernante se aplica
+ * gradiente en L) = P_total·ex, donde "ex" es la excentricidad fija de
+ * servicio (ver combinedFixedEx en soilBearing.js — misma celda B$67 que
+ * usa la hoja de referencia para las 9 combinaciones, no se recalcula por
+ * caso), y "Mx" (transversal, causa gradiente en B) = suma de los momentos
+ * propios de cada columna (se asume ambas columnas centradas en B). Ese
+ * "su" gobernante se aplica
  * de forma UNIFORME sobre toda la losa para punzonamiento (Vu = su·(Área
  * total − Área crítica), forma conservadora de la hoja de referencia) y
  * para las franjas en voladizo transversal bajo cada columna (Mu =
@@ -45,6 +47,7 @@ import {
   PHI_FLEX, PHI_SHEAR,
 } from './concreteDesign.js';
 import { evaluateEnvelope } from './seismicEnvelope.js';
+import { combinedFixedEx } from './soilBearing.js';
 
 const ALPHA_S = { interior: 40, medianera: 30, esquinera: 20 };
 
@@ -166,10 +169,15 @@ export function calculateCombinedStructural(footingData) {
 
   // -------------------------------------------------------------------
   // 1. ENVOLVENTE DE PRESIÓN FACTORADA DE TODA LA LOSA ("su") — reutilizada
-  //    para punzonamiento y franjas en voladizo transversal.
+  //    para punzonamiento y franjas en voladizo transversal. My = P·ex,
+  //    con el mismo "ex" fijo (de servicio, ver combinedFixedEx) para las
+  //    9 combinaciones factoradas — igual que la hoja de cálculo de
+  //    referencia (D103:D111 = B103:B111 * B$67, la misma celda que en la
+  //    verificación de servicio).
   // -------------------------------------------------------------------
+  const ex = combinedFixedEx(Pd1 + Pl1, Pd2 + Pl2, Myd1 + Myl1, Myd2 + Myl2, s, Psx1, Psx2, My1sx, My2sx);
   const envCases = cases.map((c) => {
-    const My_L = c.My1c + c.My2c + c.P1c * (a1 - L / 2.0) + c.P2c * (a2 - L / 2.0);
+    const My_L = (c.P1c + c.P2c) * ex;
     const Mx_B = c.Mx1c + c.Mx2c;
     return { label: c.label, Pgrav: c.Pgrav1 + c.Pgrav2, Pseis: c.Pseis1 + c.Pseis2, Mx: My_L, My: Mx_B, fz };
   });
@@ -180,6 +188,7 @@ export function calculateCombinedStructural(footingData) {
     uses_rectangular: env.uses_rectangular,
     su, su_kgcm2: kpaToKgcm2(su),
     governingRow: env.governingRow,
+    ex,
   };
 
   // -------------------------------------------------------------------

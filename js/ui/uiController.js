@@ -1685,15 +1685,18 @@ export class AppUIController {
         return [(d.Psy1 || 0) + (d.Psy2 || 0), (d.Mx1_sy || 0) + (d.Mx2_sy || 0), (d.My1_sy || 0) + (d.My2_sy || 0)];
       };
       const loadsRows = rows.map((r) => {
-        const [Ps, Mxs, Mys] = seisOf(r.label);
+        const [Ps, Mxs] = seisOf(r.label);
+        // El campo "My" no muestra el momento propio (M1+M2) sino P·ex —
+        // igual que la hoja de cálculo de referencia (D72:D76 = B72:B76 *
+        // B$67) — con el mismo "ex" fijo para todas las combinaciones.
         return `<tr class="odd:bg-sky-50">
           <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(P1 + P2)}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(MxGrav)}</td>
-          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(M1 + M2)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum((P1 + P2) * geo.ex)}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Ps)}</td>
           <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mxs)}</td>
-          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mys)}</td>
+          <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Ps * geo.ex)}</td>
         </tr>`;
       }).join('');
 
@@ -1713,9 +1716,16 @@ export class AppUIController {
         </tr>`;
       }).join('');
 
+      const x_sismo = x_c1 + geo.ex;
       step2Html = `
         <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2°) Verificamos por cargas de gravedad más momentos y sismo</h4>
-        <p class="text-[11px] text-slate-500 mb-2">σadm = ${this._p(fnd.q_adm_kgcm2)} &nbsp; σadm(sismo) = ${this._p(fnd.q_adm_kgcm2 * factor)} (factor × ${factor.toFixed(2)}). σ = N/(B·L) ± 6·My_L/(B·L²) ± 6·Mx_B/(L·B²), con N = R(1+fz) y My_L incluyendo el momento propio de cada columna más el brazo de su posición respecto al centro de la zapata; si alguna esquina resulta en tracción, se usa la distribución rectangular equivalente σx, σy.</p>
+        <p class="text-[11px] text-slate-500 mb-2">Centroide con sismo (caso CM+CV+SXD): x (C.G. sismo) = (M1+M2 con SXD + P2·l con SXD)/(P1+P2 con SXD), redondeado a 0.05 m. ex = x (C.G. sismo) − x (paso 1°) — se reutiliza igual para las 5 combinaciones de este paso.</p>
+        <table class="text-xs w-full mb-2">
+          ${this._specRow('x (C.G. sismo)', `${x_sismo.toFixed(2)} m`)}
+          ${this._specRow('ex', `${geo.ex.toFixed(2)} m`)}
+          ${this._specRow('ey', `0.00 m`)}
+        </table>
+        <p class="text-[11px] text-slate-500 mb-2">σadm = ${this._p(fnd.q_adm_kgcm2)} &nbsp; σadm(sismo) = ${this._p(fnd.q_adm_kgcm2 * factor)} (factor × ${factor.toFixed(2)}). σ = N/(B·L) ± 6·My_L/(B·L²) ± 6·Mx_B/(L·B²), con N = R(1+fz) y My_L = P·ex — "ex" es la excentricidad fija calculada en el paso 1° (diferencia entre el centroide con sismo +SXD y el centroide sin sismo), reutilizada igual para las 5 combinaciones — mismo criterio que la hoja de cálculo de referencia. Si alguna esquina resulta en tracción, se usa la distribución rectangular equivalente σx, σy.</p>
         <div class="overflow-x-auto">
         <table class="text-xs w-full border-collapse mb-2">
           <thead><tr>
@@ -1806,7 +1816,7 @@ export class AppUIController {
   _disenoCombinadaHtml(d, str) {
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1) Combinaciones de diseño</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de toda la losa para cada una (con el peso propio aproximado por el factor fz). La más desfavorable de todas se toma como la presión de diseño "su", aplicada de forma uniforme sobre toda la zapata para punzonamiento y las franjas en voladizo transversal.</p>
+      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de toda la losa para cada una (con el peso propio aproximado por el factor fz y My = P·ex, el mismo "ex" fijo del paso 2° del predimensionamiento). La más desfavorable de todas se toma como la presión de diseño "su", aplicada de forma uniforme sobre toda la zapata para punzonamiento y las franjas en voladizo transversal.</p>
       <table class="text-xs w-full border-collapse mb-2">
         <thead><tr>
           <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>

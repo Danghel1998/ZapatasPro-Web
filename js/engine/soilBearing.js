@@ -118,17 +118,40 @@ export function calculateIsolatedBearing(footingData) {
 }
 
 /**
+ * Calcula el "ex" fijo del método de la hoja de cálculo real de referencia
+ * (Efrén, "ZAPATA COMBINADA.xlsx"): la excentricidad longitudinal de
+ * servicio se calcula UNA SOLA VEZ (a partir del caso CM+CV+SXD) y se
+ * reutiliza igual para TODAS las combinaciones — incluida CM+CV sin sismo
+ * — como My = P·ex, en vez de recalcular el brazo de cada columna por
+ * separado en cada combinación:
+ *   x1 = centroide SIN sismo, respecto al eje de la columna 1 (mismo que
+ *        fija L = 2·x1 en el predimensionamiento), redondeado a 0.05 m.
+ *   x_sismo = centroide con el caso CM+CV+SXD, también redondeado.
+ *   ex = x_sismo − x1.
+ * Sin datos de sismo, x_sismo = x1 y ex = 0 (la zapata se asume centrada
+ * exactamente bajo la carga de gravedad, por construcción de L).
+ */
+export function combinedFixedEx(P1, P2, M1, M2, s, Psx1 = 0, Psx2 = 0, My1sx = 0, My2sx = 0) {
+  const round5 = (v) => Math.ceil(v / 0.05) * 0.05;
+  const x1 = round5((M1 + M2 + P2 * s) / (P1 + P2));
+  const P1s = P1 + Psx1, P2s = P2 + Psx2;
+  const M1s = M1 + My1sx, M2s = M2 + My2sx;
+  const xSismo = round5((M1s + M2s + P2s * s) / (P1s + P2s));
+  return xSismo - x1;
+}
+
+/**
  * Verificación geotécnica de una zapata COMBINADA (2 columnas, ancho B
  * constante — losa rígida única). Igual que la zapata aislada, la presión
- * de contacto es BIAXIAL: el momento longitudinal (a lo largo de L) viene
- * del momento propio de cada columna MÁS el "brazo" de su posición
- * respecto al centro de la zapata (P1·(a1−L/2) + P2·(a2−L/2)); el momento
- * transversal (a lo largo de B) viene solo del momento propio de cada
- * columna (se asume ambas centradas en B). El peso propio se aproxima con
- * el factor "fz" (ver evaluateEnvelope) en vez de calcularlo con la
- * geometría real — mismo criterio que la hoja de cálculo real de
- * referencia (Efrén, "ZAPATA COMBINADA.xlsx"): A = R(1+k)/s. Si hay datos
- * de sismo, se evalúa además la envolvente de 5 combinaciones de servicio
+ * de contacto es BIAXIAL; el momento transversal (a lo largo de B) viene
+ * del momento propio de cada columna (se asume ambas centradas en B). El
+ * momento longitudinal (a lo largo de L) usa el "ex" fijo del método de
+ * la hoja de cálculo real de referencia — ver combinedFixedEx: My = P·ex
+ * para todas las combinaciones, en vez de recalcular el brazo de cada
+ * columna por caso. El peso propio se aproxima con el factor "fz" (ver
+ * evaluateEnvelope) en vez de calcularlo con la geometría real — mismo
+ * criterio que la hoja de referencia: A = R(1+k)/s. Si hay datos de
+ * sismo, se evalúa además la envolvente de 5 combinaciones de servicio
  * (CM+CV, CM+CV±SXD, CM+CV±SYD) — mismo criterio que la zapata aislada.
  */
 export function calculateCombinedBearing(footingData) {
@@ -149,14 +172,18 @@ export function calculateCombinedBearing(footingData) {
   const My2own = tnToKn((combined.My2_d || 0) + (combined.My2_l || 0));
   const Mx1own = tnToKn((combined.Mx1_d || 0) + (combined.Mx1_l || 0));
   const Mx2own = tnToKn((combined.Mx2_d || 0) + (combined.Mx2_l || 0));
+  const Psx1_0 = tnToKn(combined.Psx1 || 0), Psx2_0 = tnToKn(combined.Psx2 || 0);
+  const My1sx_0 = tnToKn(combined.My1_sx || 0), My2sx_0 = tnToKn(combined.My2_sx || 0);
+
+  const ex = combinedFixedEx(P1, P2, My1own, My2own, s, Psx1_0, Psx2_0, My1sx_0, My2sx_0);
 
   // Momento longitudinal total (causa gradiente en L) y transversal total
   // (causa gradiente en B), bajo cargas de servicio SIN sismo.
-  const My_L = My1own + My2own + P1 * (a1 - L / 2) + P2 * (a2 - L / 2);
+  const My_L = R * ex;
   const Mx_B = Mx1own + Mx2own;
 
-  const x_R = R > 0.001 ? L / 2 + My_L / R : L / 2;
-  const e = R > 0.001 ? My_L / R : 0;
+  const x_R = L / 2 + ex;
+  const e = ex;
   const e_max = L / 6.0;
   const within_kern = Math.abs(e) <= e_max;
 
@@ -187,28 +214,27 @@ export function calculateCombinedBearing(footingData) {
 
   let seismic_envelope = null;
   if (hasSeismic) {
-    const Psx1 = tnToKn(combined.Psx1 || 0), Mx1sx = tnToKn(combined.Mx1_sx || 0), My1sx = tnToKn(combined.My1_sx || 0);
-    const Psx2 = tnToKn(combined.Psx2 || 0), Mx2sx = tnToKn(combined.Mx2_sx || 0), My2sx = tnToKn(combined.My2_sx || 0);
-    const Psy1 = tnToKn(combined.Psy1 || 0), Mx1sy = tnToKn(combined.Mx1_sy || 0), My1sy = tnToKn(combined.My1_sy || 0);
-    const Psy2 = tnToKn(combined.Psy2 || 0), Mx2sy = tnToKn(combined.Mx2_sy || 0), My2sy = tnToKn(combined.My2_sy || 0);
+    const Psx1 = tnToKn(combined.Psx1 || 0), Mx1sx = tnToKn(combined.Mx1_sx || 0);
+    const Psx2 = tnToKn(combined.Psx2 || 0), Mx2sx = tnToKn(combined.Mx2_sx || 0);
+    const Psy1 = tnToKn(combined.Psy1 || 0), Mx1sy = tnToKn(combined.Mx1_sy || 0);
+    const Psy2 = tnToKn(combined.Psy2 || 0), Mx2sy = tnToKn(combined.Mx2_sy || 0);
 
-    /** Construye un caso de servicio: P1c/P2c (con sismo axial, sign·±)
-     * se usan para el "brazo" de posición del momento longitudinal —
-     * cálculo riguroso por caso, en vez de reutilizar una excentricidad
-     * fija de un solo caso de referencia (a diferencia de la hoja de
-     * cálculo original). */
-    function buildCase(label, Pseis1, Pseis2, Mx1seis, Mx2seis, My1seis, My2seis) {
+    /** Construye un caso de servicio: My = (P1c+P2c)·ex, con el mismo "ex"
+     * fijo para las 5 combinaciones — igual que la hoja de cálculo de
+     * referencia (D72:D76 = B72:B76 * B$67) —, en vez de recalcular el
+     * brazo de cada columna por separado en cada combinación. */
+    function buildCase(label, Pseis1, Pseis2, Mx1seis, Mx2seis) {
       const P1c = P1 + Pseis1, P2c = P2 + Pseis2;
-      const My_L_case = My1own + My2own + My1seis + My2seis + P1c * (a1 - L / 2) + P2c * (a2 - L / 2);
+      const My_L_case = (P1c + P2c) * ex;
       const Mx_B_case = Mx1own + Mx2own + Mx1seis + Mx2seis;
       return { label, Pgrav: R, Pseis: Pseis1 + Pseis2, Mx: My_L_case, My: Mx_B_case, fz, limit: q_adm_seismic };
     }
     const cases = [
-      buildCase('CM+CV', 0, 0, 0, 0, 0, 0),
-      buildCase('CM+CV+SXD', Psx1, Psx2, Mx1sx, Mx2sx, My1sx, My2sx),
-      buildCase('CM+CV−SXD', -Psx1, -Psx2, -Mx1sx, -Mx2sx, -My1sx, -My2sx),
-      buildCase('CM+CV+SYD', Psy1, Psy2, Mx1sy, Mx2sy, My1sy, My2sy),
-      buildCase('CM+CV−SYD', -Psy1, -Psy2, -Mx1sy, -Mx2sy, -My1sy, -My2sy),
+      buildCase('CM+CV', 0, 0, 0, 0),
+      buildCase('CM+CV+SXD', Psx1, Psx2, Mx1sx, Mx2sx),
+      buildCase('CM+CV−SXD', -Psx1, -Psx2, -Mx1sx, -Mx2sx),
+      buildCase('CM+CV+SYD', Psy1, Psy2, Mx1sy, Mx2sy),
+      buildCase('CM+CV−SYD', -Psy1, -Psy2, -Mx1sy, -Mx2sy),
     ];
     const env = evaluateEnvelope(cases, L, B);
     seismic_envelope = {
@@ -227,7 +253,7 @@ export function calculateCombinedBearing(footingData) {
     P2_tn: combined.P2d + combined.P2l,
     R, R_tn: knToTn(R), N, N_tn: knToTn(N),
     fz, selfWeight_equiv_tn: knToTn(N) - knToTn(R),
-    x_R, x_N: x_R, e, e_max, within_kern,
+    x_R, x_N: x_R, e, ex, e_max, within_kern,
     My_L, Mx_B,
     q_max, q_min,
     q_max_kgcm2: kpaToKgcm2(q_max),
