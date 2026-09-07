@@ -26,28 +26,28 @@ export const DEFAULT_FOOTING_DATA = {
   footing_type: 'aislada', // 'aislada' | 'combinada' | 'conectada'
 
   // ---- Zapata Aislada ----
+  // Valores por defecto = caso de verificación de la hoja de cálculo real
+  // de referencia (Efrén, "ZAPATA TIPO 1.xlsx"), columna interior 0.30×0.30.
   isolated: {
     // Geometría en planta: L = dirección X, B = dirección Y (m)
-    L: 2.20,
-    B: 2.20,
-    h: 0.50,       // peralte total de la zapata
-    col_L: 0.40,   // columna, dimensión en X
-    col_B: 0.40,   // columna, dimensión en Y
+    L: 2.10,
+    B: 2.10,
+    h: 0.60,       // peralte total de la zapata
+    col_L: 0.30,   // columna, dimensión en X
+    col_B: 0.30,   // columna, dimensión en Y
     ex_col: 0.0,   // excentricidad de la columna respecto al centro de la zapata, eje X (m)
     ey_col: 0.0,   // ídem, eje Y (m)
-    Df: 1.50,      // profundidad de desplante
+    Df: 1.60,      // profundidad de desplante
     // Cargas en la base de la columna (sobre el fuste, nivel superior de la zapata)
-    Pd: 35.0,      // carga muerta de servicio (tn)
-    Pl: 15.0,      // carga viva de servicio (tn)
-    Mx_d: 0.0, Mx_l: 0.0, // momento de servicio en torno al eje "y" (produce excentricidad en X, dirección L) (tn-m)
-    My_d: 0.0, My_l: 0.0, // momento de servicio en torno al eje "x" (produce excentricidad en Y, dirección B) (tn-m)
+    Pd: 16.65,     // carga muerta de servicio (tn)
+    Pl: 28.85,     // carga viva de servicio (tn)
+    Mx_d: 0.1971, Mx_l: 0.0447, // momento de servicio en torno al eje "y" (produce excentricidad en X, dirección L) (tn-m)
+    My_d: 0.1592, My_l: 0.0381, // momento de servicio en torno al eje "x" (produce excentricidad en Y, dirección B) (tn-m)
     // Sismo en X e Y (cada uno como un caso de carga de servicio propio,
     // sin descomponer en muerta/viva — igual convención que la hoja de
-    // cálculo de referencia: "SXD"/"SYD"). Con ambos en 0 (caso por
-    // defecto), la envolvente σ1/σ2/σ3 se reduce a la única combinación
-    // de gravedad 1.4CM+1.7CV, igual que antes.
-    Psx: 0.0, Mx_sx: 0.0, My_sx: 0.0,
-    Psy: 0.0, Mx_sy: 0.0, My_sy: 0.0,
+    // cálculo de referencia: "SXD"/"SYD").
+    Psx: 0.4187, Mx_sx: 0.0, My_sx: 0.1267,
+    Psy: 0.4196, Mx_sy: 0.1037, My_sy: 0.0,
     // Incremento admisible en la capacidad portante para combinaciones
     // que incluyen sismo (E.030) — 1.25 según la hoja de cálculo de
     // referencia (Efrén, "ZAPATA TIPO 1.xlsx"). Queda configurable.
@@ -107,7 +107,7 @@ export const DEFAULT_FOOTING_DATA = {
   foundation: {
     gamma_kgm3: 1800.0,   // peso específico del suelo (kg/m³)
     phi: 30.0,            // ángulo de fricción interna (°), referencial
-    q_adm_kgcm2: 2.00,    // capacidad portante admisible del estudio de suelos (kg/cm²), a la profundidad Df
+    q_adm_kgcm2: 1.20,    // capacidad portante admisible del estudio de suelos (kg/cm²), a la profundidad Df — hoja de referencia Efrén
   },
 
   materials: {
@@ -138,8 +138,8 @@ export const DEFAULT_FOOTING_DATA = {
 
 export const PRESET_PROJECTS = {
   zapata_aislada_tipica: {
-    title: '⭐ Zapata Aislada Típica (P=50 tn, q_adm=2.0 kg/cm²)',
-    desc: 'Columna 40x40cm, carga de servicio 50 tn, sin momentos, suelo con capacidad admisible 2.0 kg/cm² a Df=1.50m.',
+    title: '⭐ Zapata Aislada Típica — Caso de Verificación (Efrén)',
+    desc: 'Columna interior 0.30×0.30 m, h=0.60 m, con cargas de gravedad y sismo en X e Y — reproduce exactamente la hoja de cálculo real de referencia "ZAPATA TIPO 1.xlsx" (fz=0.08, factor sismo=1.25, q_adm=1.2 kg/cm²) para verificar que el programa da los mismos resultados.',
     data: JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA))
   },
   zapata_aislada_excentrica: {
@@ -175,34 +175,13 @@ export const PRESET_PROJECTS = {
       return d;
     })()
   },
-  zapata_aislada_efren: {
-    title: 'Zapata Aislada Interior — Caso de Verificación (Efrén)',
-    desc: 'Columna interior 0.30×0.30 m, h=0.60 m, con cargas de gravedad y sismo en X e Y — reproduce exactamente la hoja de cálculo real de referencia "ZAPATA TIPO 1.xlsx" (fz=0.08, factor sismo=1.25) para verificar que el programa da los mismos resultados.',
-    data: (() => {
-      const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
-      d.footing_type = 'aislada';
-      d.isolated.L = 2.10; d.isolated.B = 2.10; d.isolated.h = 0.60;
-      d.isolated.col_L = 0.30; d.isolated.col_B = 0.30;
-      d.isolated.Df = 1.60;
-      d.isolated.Pd = 16.65; d.isolated.Pl = 28.85;
-      d.isolated.Mx_d = 0.1971; d.isolated.Mx_l = 0.0447;
-      d.isolated.My_d = 0.1592; d.isolated.My_l = 0.0381;
-      d.isolated.Psx = 0.4187; d.isolated.Mx_sx = 0.0; d.isolated.My_sx = 0.1267;
-      d.isolated.Psy = 0.4196; d.isolated.Mx_sy = 0.1037; d.isolated.My_sy = 0.0;
-      d.isolated.col_type = 'interior';
-      d.isolated.fz = 0.08;
-      d.isolated.seismic_bearing_factor = 1.25;
-      d.foundation.gamma_kgm3 = 1800.0;
-      d.foundation.q_adm_kgcm2 = 1.2;
-      return d;
-    })()
-  },
   zapata_combinada_tipica: {
     title: 'Zapata Combinada — 2 Columnas (Columna de Borde + Columna Interior)',
     desc: 'Caso clásico: columna 1 al borde de propiedad (no admite zapata aislada) + columna 2 interior, unidas por una zapata combinada rectangular.',
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'combinada';
+      d.foundation.q_adm_kgcm2 = 2.0;
       return d;
     })()
   },
@@ -212,6 +191,7 @@ export const PRESET_PROJECTS = {
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'conectada';
+      d.foundation.q_adm_kgcm2 = 2.0;
       return d;
     })()
   }
