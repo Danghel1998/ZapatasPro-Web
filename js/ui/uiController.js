@@ -1630,7 +1630,14 @@ export class AppUIController {
     const M1 = (d.My1_d || 0) + (d.My1_l || 0), M2 = (d.My2_d || 0) + (d.My2_l || 0);
     const a1 = d.a1, s = d.s, a2 = a1 + s;
 
-    const x_R = a1 + (P2 * s + M1 + M2) / (P1 + P2);
+    // "x" — mismo nombre que la hoja de cálculo de referencia (Efrén): la
+    // distancia del EJE DE LA COLUMNA 1 al centroide de la resultante (NO
+    // desde el borde izquierdo). x̄ (con barra) es esa misma distancia pero
+    // medida desde el borde izquierdo (x̄ = a1 + x) — la que usamos para
+    // centrar la zapata con L = 2x̄. Se muestran ambas para poder cotejar
+    // directo contra la hoja de cálculo, que solo reporta "x".
+    const x_c1 = (P2 * s + M1 + M2) / (P1 + P2);
+    const x_R = a1 + x_c1;
     // L debe cubrir el centroide (2x̄, zapata centrada) Y, como a1/s ya
     // fijan la posición del eje de la columna 2, alcanzar al menos hasta
     // su cara derecha — si no, la columna 2 quedaría fuera de la zapata.
@@ -1645,14 +1652,16 @@ export class AppUIController {
 
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1°) Verificamos por cargas de gravedad más momentos</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Centroide de cargas (llevadas hacia la columna 1): x̄ = a1 + (P2·l + M1 + M2)/(P1+P2), medido desde el borde izquierdo, con "l" la distancia entre ejes de columna. L = 2x̄ (zapata centrada en la resultante, excentricidad nula). Área tentativa: A = (P1+P2)(1+fz)/q_adm, con fz = ${fz.toFixed(2)}.</p>
+      <p class="text-[11px] text-slate-500 mb-2">Centroide de cargas (llevadas hacia la columna 1): x = (P2·l + M1 + M2)/(P1+P2), medido desde el EJE de la columna 1 — mismo "x" de la hoja de cálculo de referencia —, con "l" la distancia entre ejes de columna. Medido desde el borde izquierdo de la zapata: x̄ = a1 + x. L = 2x̄ (zapata centrada en la resultante, excentricidad nula). Área tentativa: A = (P1+P2)(1+fz)/q_adm, con fz = ${fz.toFixed(2)}.</p>
       <table class="text-xs w-full mb-2">
         ${this._specRow('P1 (CM+CV)', `${this._trimNum(P1)} Ton`)}
         ${this._specRow('P2 (CM+CV)', `${this._trimNum(P2)} Ton`)}
         ${this._specRow('M1 (My, propio)', `${this._trimNum(M1)} Ton-m`)}
         ${this._specRow('M2 (My, propio)', `${this._trimNum(M2)} Ton-m`)}
         ${this._specRow('l (distancia entre ejes)', `${s.toFixed(2)} m`)}
-        ${this._specRow('x̄ (centroide, desde borde izq.)', `${x_R.toFixed(2)} m`)}
+        ${this._specRow('x (centroide, desde eje de Columna 1)', `${x_c1.toFixed(2)} m`)}
+        ${this._specRow('a1 (borde izq. a eje de Columna 1)', `${a1.toFixed(2)} m`)}
+        ${this._specRow('x̄ = a1 + x (centroide, desde borde izq.)', `${x_R.toFixed(2)} m`)}
         ${this._specRow('Área tentativa (A)', `${A_req.toFixed(2)} m²`)}
       </table>
       <div class="flex justify-center mb-2">${this._combinedPredimSketchSvg(d.L, d.B, a1, d.col1_L, d.col1_B, a2, d.col2_L, d.col2_B)}</div>
