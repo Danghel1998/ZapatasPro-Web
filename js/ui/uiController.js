@@ -894,6 +894,31 @@ export class AppUIController {
     </div>`;
   }
 
+  /** Isométrico 3D embebido justo debajo del cajetín, al inicio de la
+   * Memoria de Cálculo — se crea el visor 3D bajo demanda si el usuario
+   * nunca abrió esa pestaña en esta sesión (mismo criterio que usa
+   * "Generar Plano" para que el isométrico siempre esté disponible en el
+   * informe, no solo cuando ya se visitó "Detalle 3D"). */
+  _isometricoImgHtml() {
+    let img = '';
+    try {
+      const container3D = document.getElementById('canvas3d_container');
+      if (!this.renderer3D && container3D) {
+        this.renderer3D = new FootingRenderer3D(container3D);
+        this._setupRebar3DLegendToggles();
+      }
+      if (this.renderer3D) {
+        this.renderer3D.updateData(this.data, this.bearingResults, this.structResults);
+        img = this.renderer3D.captureSnapshot();
+      }
+    } catch (e) { /* no disponible */ }
+    if (!img) return '';
+    return `<div class="border border-slate-200 rounded-lg overflow-hidden bg-white mb-6">
+      <div class="bg-slate-100 text-[10px] font-bold text-slate-600 uppercase tracking-wide px-2 py-1 border-b border-slate-200">Isométrico 3D</div>
+      <img src="${img}" alt="Isométrico 3D" class="w-full block">
+    </div>`;
+  }
+
 
   /** Vista en Sección (corte), con las flechas de llamada del acero ya
    * dibujadas en el propio canvas (_drawSectionRebarIsolated) — embebida
@@ -1433,6 +1458,7 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA AISLADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
+    html += this._isometricoImgHtml();
 
     html += this._datosDisenoIsoladaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoIsoladaHtml(d, fnd, mat, geo);
@@ -1450,6 +1476,7 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA COMBINADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
+    html += this._isometricoImgHtml();
 
     html += this._sectionTitle('1. Datos de Entrada');
     html += this._table(['Parámetro', 'Valor'], [
@@ -1806,6 +1833,7 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA CONECTADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
+    html += this._isometricoImgHtml();
 
     html += this._datosDisenoConectadaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoConectadaHtml(d, fnd, mat, geo);
