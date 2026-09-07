@@ -1116,13 +1116,13 @@ export class AppUIController {
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
       ['Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ex) <= geo.ex_max)],
       ['Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, this._badgeHtml(Math.abs(geo.ey) <= geo.ey_max)],
-      ['Presión máxima de contacto q_max (sin sismo)', this._p(geo.q_max_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_kgcm2)],
+      ['Presión máxima de contacto q_max (sin sismo)', this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)],
     ]);
     if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
 
     if (geo.hasSeismic) {
       html += `<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1.5">2.1 Envolvente Sísmica (Cargas de Servicio)</h3>`;
-      html += `<p class="text-xs text-slate-600 mb-2">σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para CM+CV, CM+CV±SXD y CM+CV±SYD. CM+CV se limita a q_adm; las combinaciones con sismo, a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm.</p>`;
+      html += `<p class="text-xs text-slate-600 mb-2">σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para CM+CV, CM+CV±SXD y CM+CV±SYD. Al haber datos de sismo en el proyecto, las 5 combinaciones se limitan a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm.</p>`;
       html += this._table(['Combinación', 'q (esquina más desfavorable)', 'Límite admisible', 'Estado'], geo.seismic_envelope.rows.map((r) => [
         r.label,
         `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,

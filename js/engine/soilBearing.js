@@ -50,31 +50,34 @@ export function calculateIsolatedBearing(footingData) {
     effective_note = `La excentricidad resultante (e = ${e_res.toFixed(3)} m) cae fuera del tercio medio — se estima de forma aproximada y conservadora con un área efectiva triangular. Aumenta la zapata o reduce el momento actuante.`;
   }
 
-  const pass_bearing = q_max <= q_adm;
-
   // -------------------------------------------------------------------
   // ENVOLVENTE SÍSMICA (σ1 sin sismo, σ2 sismo X, σ3 sismo Y — cada una
   // evaluada en ambos sentidos ±) — solo si se ingresó algún dato de
   // sismo; en caso contrario se omite y rige únicamente el caso biaxial
   // simple ya calculado arriba. Mismo método que la hoja de cálculo real
   // de referencia (Efrén): σ = P/A ± 6Mx/(BL²) ± 6My/(LB²), con la carga
-  // axial de gravedad inflada por (1+fz) como sustituto del peso propio,
-  // σ2/σ3 limitados a factor·q_adm (la hoja usa 1.25; aquí es
-  // configurable), y el sismo combinado en ambos sentidos (+/−) porque
-  // puede actuar en cualquier dirección.
+  // axial de gravedad inflada por (1+fz) como sustituto del peso propio.
+  // Si el proyecto tiene datos de sismo, el límite amplificado
+  // (factor·q_adm) rige para las 5 combinaciones — incluida CM+CV —, no
+  // solo para las que incluyen sismo; si no hay sismo, rige el q_adm
+  // simple. El sismo se combina en ambos sentidos (+/−) porque puede
+  // actuar en cualquier dirección.
   // -------------------------------------------------------------------
   const hasSeismic = Math.abs(isolated.Psx || 0) > 1e-9 || Math.abs(isolated.Psy || 0) > 1e-9
     || Math.abs(isolated.Mx_sx || 0) > 1e-9 || Math.abs(isolated.My_sx || 0) > 1e-9
     || Math.abs(isolated.Mx_sy || 0) > 1e-9 || Math.abs(isolated.My_sy || 0) > 1e-9;
 
+  const q_adm_seismic = q_adm * (isolated.seismic_bearing_factor || 1.25);
+  const q_adm_eff = hasSeismic ? q_adm_seismic : q_adm;
+  const pass_bearing = q_max <= q_adm_eff;
+
   let seismic_envelope = null;
   if (hasSeismic) {
     const Psx = tnToKn(isolated.Psx || 0), Mx_sx = tnToKn(isolated.Mx_sx || 0), My_sx = tnToKn(isolated.My_sx || 0);
     const Psy = tnToKn(isolated.Psy || 0), Mx_sy = tnToKn(isolated.Mx_sy || 0), My_sy = tnToKn(isolated.My_sy || 0);
-    const q_adm_seismic = q_adm * (isolated.seismic_bearing_factor || 1.25);
 
     const cases = [
-      { label: 'CM+CV', Pgrav: P_col, Pseis: 0, Mx, My, fz, limit: q_adm },
+      { label: 'CM+CV', Pgrav: P_col, Pseis: 0, Mx, My, fz, limit: q_adm_seismic },
       { label: 'CM+CV+SXD', Pgrav: P_col, Pseis: Psx, Mx: Mx + Mx_sx, My: My + My_sx, fz, limit: q_adm_seismic },
       { label: 'CM+CV−SXD', Pgrav: P_col, Pseis: -Psx, Mx: Mx - Mx_sx, My: My - My_sx, fz, limit: q_adm_seismic },
       { label: 'CM+CV+SYD', Pgrav: P_col, Pseis: Psy, Mx: Mx + Mx_sy, My: My + My_sy, fz, limit: q_adm_seismic },
@@ -105,6 +108,7 @@ export function calculateIsolatedBearing(footingData) {
     q_max_kgcm2: kpaToKgcm2(q_max),
     q_min_kgcm2: kpaToKgcm2(q_min),
     q_adm, q_adm_kgcm2: foundation.q_adm_kgcm2,
+    q_adm_eff_kgcm2: kpaToKgcm2(q_adm_eff),
     hasSeismic, seismic_envelope,
     pass_bearing: hasSeismic ? seismic_envelope.pass : pass_bearing,
     pass_kern: within_kern,
