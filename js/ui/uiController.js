@@ -977,6 +977,45 @@ export class AppUIController {
   }
 
   /**
+   * Boceto en planta del predimensionamiento (zapata Lp×Bp, columna a×b
+   * centrada, volado "c" repartido por igual en las 4 direcciones) — SVG
+   * propio, con la misma paleta y convención de cotas del visualizador
+   * (footingCanvas.js, paleta clara), en vez de reproducir literalmente el
+   * dibujo de la hoja de cálculo de referencia.
+   */
+  _predimSketchSvg(Lp, Bp, a, b, cRound) {
+    const vw = 260, vh = 190;
+    const top = 22, right = 30;
+    const availW = vw - right - 14, availH = vh - top - 14;
+    const scale = Math.min(availW / Lp, availH / Bp);
+    const w = Lp * scale, h = Bp * scale;
+    const x0 = 14, y0 = top;
+    const cw = a * scale, ch = b * scale;
+    const cx0 = x0 + (w - cw) / 2, cy0 = y0 + (h - ch) / 2;
+    const fillFooting = '#e7ebf1', strokeFooting = '#334155';
+    const fillCol = '#94a3b8', strokeCol = '#1e293b';
+    const dim = '#64748b', text = '#334155';
+    const cLabel = `c = ${cRound.toFixed(2)} m`;
+
+    return `<svg viewBox="0 0 ${vw} ${vh}" width="260" height="190" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+      <rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${fillFooting}" stroke="${strokeFooting}" stroke-width="1.5"/>
+      <rect x="${cx0}" y="${cy0}" width="${cw}" height="${ch}" fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.2"/>
+      <line x1="${x0}" y1="${y0 - 10}" x2="${x0 + w}" y2="${y0 - 10}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0}" y1="${y0 - 14}" x2="${x0}" y2="${y0 - 6}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0 + w}" y1="${y0 - 14}" x2="${x0 + w}" y2="${y0 - 6}" stroke="${dim}" stroke-width="1"/>
+      <text x="${x0 + w / 2}" y="${y0 - 13}" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">L = ${Lp.toFixed(2)} m</text>
+      <line x1="${x0 + w + 10}" y1="${y0}" x2="${x0 + w + 10}" y2="${y0 + h}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0 + w + 6}" y1="${y0}" x2="${x0 + w + 14}" y2="${y0}" stroke="${dim}" stroke-width="1"/>
+      <line x1="${x0 + w + 6}" y1="${y0 + h}" x2="${x0 + w + 14}" y2="${y0 + h}" stroke="${dim}" stroke-width="1"/>
+      <text x="0" y="0" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif" transform="translate(${x0 + w + 22} ${y0 + h / 2}) rotate(-90)">B = ${Bp.toFixed(2)} m</text>
+      <line x1="${x0}" y1="${cy0 + ch / 2}" x2="${cx0}" y2="${cy0 + ch / 2}" stroke="${dim}" stroke-width="1" stroke-dasharray="2,2"/>
+      <text x="${(x0 + cx0) / 2}" y="${cy0 + ch / 2 - 4}" font-size="8.5" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">${cLabel}</text>
+      <line x1="${cx0 + cw / 2}" y1="${y0}" x2="${cx0 + cw / 2}" y2="${cy0}" stroke="${dim}" stroke-width="1" stroke-dasharray="2,2"/>
+      <text x="${cx0 + cw / 2 + 4}" y="${(y0 + cy0) / 2 + 3}" font-size="8.5" fill="${text}" font-family="Inter, sans-serif">${cLabel}</text>
+    </svg>`;
+  }
+
+  /**
    * Sección "II) PREDIMENSIONAMIENTO", al estilo de la hoja de cálculo de
    * referencia (Efrén — "ZAPATA TIPO 1.xlsx"): 1°) área tentativa por
    * cargas de gravedad (A = P(1+fz)/q_adm, mismo método y volado "c" que
@@ -1009,7 +1048,8 @@ export class AppUIController {
         ${this._specRow('Volado calculado (c)', `${cRaw.toFixed(2)} m`)}
         ${this._specRow('Volado redondeado (c)', `${cRound.toFixed(2)} m`)}
       </table>
-      <p class="text-xs font-semibold text-slate-800">Dimensiones predimensionadas: L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>`;
+      <div class="flex justify-center mb-2">${this._predimSketchSvg(Lp, Bp, a, b, cRound)}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones predimensionadas: L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>`;
 
     let step2Html = '';
     if (geo.hasSeismic && geo.seismic_envelope) {

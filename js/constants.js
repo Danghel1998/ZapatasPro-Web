@@ -39,15 +39,15 @@ export const DEFAULT_FOOTING_DATA = {
     ey_col: 0.0,   // ídem, eje Y (m)
     Df: 1.60,      // profundidad de desplante
     // Cargas en la base de la columna (sobre el fuste, nivel superior de la zapata)
-    Pd: 16.65,     // carga muerta de servicio (tn)
-    Pl: 28.85,     // carga viva de servicio (tn)
-    Mx_d: 0.1971, Mx_l: 0.0447, // momento de servicio en torno al eje "y" (produce excentricidad en X, dirección L) (tn-m)
-    My_d: 0.1592, My_l: 0.0381, // momento de servicio en torno al eje "x" (produce excentricidad en Y, dirección B) (tn-m)
+    Pd: 26.7315,   // carga muerta de servicio (tn)
+    Pl: 5.23,      // carga viva de servicio (tn)
+    Mx_d: 0.189, Mx_l: 0.0442,   // momento de servicio en torno al eje "y" (produce excentricidad en X, dirección L) (tn-m)
+    My_d: 0.2046, My_l: 0.0521,  // momento de servicio en torno al eje "x" (produce excentricidad en Y, dirección B) (tn-m)
     // Sismo en X e Y (cada uno como un caso de carga de servicio propio,
     // sin descomponer en muerta/viva — igual convención que la hoja de
     // cálculo de referencia: "SXD"/"SYD").
-    Psx: 0.4187, Mx_sx: 0.0, My_sx: 0.1267,
-    Psy: 0.4196, Mx_sy: 0.1037, My_sy: 0.0,
+    Psx: 0.1743, Mx_sx: 0.0, My_sx: 0.0429,
+    Psy: 0.4594, Mx_sy: 0.115, My_sy: 0.0,
     // Incremento admisible en la capacidad portante para combinaciones
     // que incluyen sismo (E.030) — 1.25 según la hoja de cálculo de
     // referencia (Efrén, "ZAPATA TIPO 1.xlsx"). Queda configurable.
@@ -138,8 +138,8 @@ export const DEFAULT_FOOTING_DATA = {
 
 export const PRESET_PROJECTS = {
   zapata_aislada_tipica: {
-    title: '⭐ Zapata Aislada Típica — Caso de Verificación (Efrén)',
-    desc: 'Columna interior 0.30×0.30 m, h=0.60 m, con cargas de gravedad y sismo en X e Y — reproduce exactamente la hoja de cálculo real de referencia "ZAPATA TIPO 1.xlsx" (fz=0.08, factor sismo=1.25, q_adm=1.2 kg/cm²) para verificar que el programa da los mismos resultados.',
+    title: '⭐ Zapata Aislada Típica',
+    desc: 'Columna interior 0.30×0.30 m, h=0.60 m, con cargas de gravedad y sismo en X e Y — misma metodología (fz=0.08, factor sismo=1.25, q_adm=1.2 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA TIPO 1.xlsx".',
     data: JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA))
   },
   zapata_aislada_excentrica: {
