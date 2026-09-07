@@ -1285,56 +1285,78 @@ export class AppUIController {
    * acero finalmente elegido (longitudinal/banda central/franjas
    * exteriores), igual que la hoja de referencia.
    */
+  /** Tarjeta compacta de resultado (etiqueta + valor grande + estado),
+   * para resaltar los números clave de cada verificación como en un
+   * informe — en vez de perderlos dentro de una tabla larga. `pass` en
+   * `null` la deja neutra (sin verificación asociada, p.ej. un dato
+   * informativo). */
+  _statCard(label, value, sub, pass) {
+    const tone = pass === true ? 'border-emerald-300 bg-emerald-50' : pass === false ? 'border-rose-300 bg-rose-50' : 'border-slate-300 bg-slate-50';
+    const valColor = pass === true ? 'text-emerald-700' : pass === false ? 'text-rose-700' : 'text-slate-800';
+    return `<div class="border ${tone} rounded-lg px-3 py-2 text-center">
+      <div class="text-[9.5px] font-semibold text-slate-500 uppercase tracking-wide">${label}</div>
+      <div class="text-sm font-extrabold font-mono ${valColor} mt-0.5">${value}</div>
+      ${sub ? `<div class="text-[9.5px] text-slate-500 mt-0.5">${sub}</div>` : ''}
+    </div>`;
+  }
+
   _disenoIsoladaHtml(d, str) {
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1) Combinaciones de diseño</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — aplicadas sobre la presión de contacto en las 4 esquinas de la zapata (con el peso propio aproximado por fz). La más desfavorable se toma como presión de diseño "su", aplicada de forma uniforme sobre toda la zapata.</p>
+      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de la zapata para cada una (con el peso propio aproximado por el factor fz). La más desfavorable de todas se toma como la presión de diseño "σu", aplicada de forma uniforme sobre toda la zapata para punzonamiento, corte y flexión.</p>
       <table class="text-xs w-full border-collapse mb-2">
         <thead><tr>
           <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
           <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ (esquina más desfavorable)</th>
         </tr></thead>
         <tbody>
-          ${str.envelope.rows.map((r) => `<tr class="odd:bg-sky-50">
-            <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
+          ${str.envelope.rows.map((r) => `<tr class="odd:bg-sky-50 ${r.label === str.envelope.governingRow.label ? 'font-bold' : ''}">
+            <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}${r.label === str.envelope.governingRow.label ? ' ⟵ gobierna' : ''}</td>
             <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}</td>
           </tr>`).join('')}
         </tbody>
       </table>
-      <p class="text-xs font-semibold text-slate-800">Combinación gobernante: ${str.envelope.governingRow.label}. σu = ${this._p(str.envelope.su_kgcm2, 3)} (presión de diseño uniforme).</p>`;
+      <div class="grid grid-cols-2 gap-2">
+        ${this._statCard('Combinación gobernante', str.envelope.governingRow.label, null, null)}
+        ${this._statCard('σu — presión de diseño', this._p(str.envelope.su_kgcm2, 3), 'uniforme sobre toda la zapata', null)}
+      </div>`;
 
     const pn = str.punching;
     const step2Html = `
-      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2) Diseño por punzonamiento</h4>
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2) Diseño por punzonamiento (corte en dos direcciones)</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Verifica que el concreto resista el corte que la columna "punzona" a través del peralte de la zapata, en un perímetro crítico ubicado a d/2 de sus caras. La resistencia φVc es el menor de tres expresiones (E.060 / ACI 318 22.6.5), según la relación de lados de la columna (βc) y su ubicación (interior/borde/esquina, factor αs).</p>
       <div class="flex flex-col md:flex-row gap-4 items-start">
-        <table class="text-xs w-full md:w-auto md:flex-1">
-          ${this._specRow('h', `${d.h.toFixed(2)} m`)}
-          ${this._specRow('d (promedio)', `${pn.d_avg.toFixed(2)} m`)}
-          ${this._specRow('Ao', `${pn.areaWithinPerimeter.toFixed(2)} m²`)}
-          ${this._specRow('bo', `${pn.bo.toFixed(2)} m`)}
-          ${this._specRow('βc', pn.betaC.toFixed(2))}
-          ${this._specRow('Tipo de columna', `${d.col_type} (αs = ${{ interior: 40, medianera: 30, esquinera: 20 }[d.col_type] ?? 40})`)}
-          ${this._specRow('Vu = σu·(A_zapata − Ao)', `${knToKg(pn.Vu).toFixed(0)} kg`)}
-          ${this._specRow('Vc1 = 0.53(1+2/βc)√f\'c·bo·d', `${knToKg(pn.Vc1).toFixed(0)} kg`)}
-          ${this._specRow('Vc2 = 0.27(αs·d/bo+2)√f\'c·bo·d', `${knToKg(pn.Vc2).toFixed(0)} kg`)}
-          ${this._specRow('Vc3 = 1.06√f\'c·bo·d', `${knToKg(pn.Vc3).toFixed(0)} kg`)}
-          ${this._specRow('Vc = mín(Vc1,Vc2,Vc3)', `${knToKg(pn.Vc).toFixed(0)} kg`)}
-          ${this._specRow('φVc', `${knToKg(pn.phiVc).toFixed(0)} kg`)}
-        </table>
+        <div class="w-full md:flex-1">
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            ${this._statCard('Vu (cortante actuante)', `${knToKg(pn.Vu).toFixed(0)} kg`, null, null)}
+            ${this._statCard('φVc (resistencia)', `${knToKg(pn.phiVc).toFixed(0)} kg`, null, null)}
+          </div>
+          <table class="text-xs w-full">
+            ${this._specRow('Peralte efectivo (d)', `${pn.d_avg.toFixed(2)} m`)}
+            ${this._specRow('Área dentro del perímetro (Ao)', `${pn.areaWithinPerimeter.toFixed(2)} m²`)}
+            ${this._specRow('Perímetro crítico (bo)', `${pn.bo.toFixed(2)} m`)}
+            ${this._specRow('Relación de lados de columna (βc)', pn.betaC.toFixed(2))}
+            ${this._specRow('Tipo de columna (αs)', `${d.col_type} (αs = ${{ interior: 40, medianera: 30, esquinera: 20 }[d.col_type] ?? 40})`)}
+            ${this._specRow('Vc1 = 0.53(1+2/βc)√f\'c·bo·d', `${knToKg(pn.Vc1).toFixed(0)} kg`)}
+            ${this._specRow('Vc2 = 0.27(αs·d/bo+2)√f\'c·bo·d', `${knToKg(pn.Vc2).toFixed(0)} kg`)}
+            ${this._specRow('Vc3 = 1.06√f\'c·bo·d', `${knToKg(pn.Vc3).toFixed(0)} kg`)}
+            ${this._specRow('Vc = mín(Vc1,Vc2,Vc3)', `${knToKg(pn.Vc).toFixed(0)} kg`)}
+          </table>
+        </div>
         <div class="flex justify-center w-full md:w-auto">${this._punchingSketchSvg()}</div>
       </div>
-      <p class="text-xs font-semibold mt-1">Verificación Vu ≤ φVc: ${this._estadoCell(pn.pass)}</p>`;
+      <p class="text-xs font-semibold mt-2">Verificación Vu ≤ φVc: ${this._estadoCell(pn.pass)}</p>`;
 
     const shearDir = (label, res) => `
-      <h5 class="text-[11px] font-bold text-slate-600 mt-2 mb-1">Dirección ${label} (voladizo ${res.strip.side}, Lc = ${res.strip.Lc.toFixed(2)} m)</h5>
-      <table class="text-xs w-full">
-        ${this._specRow('Vu = σu·(volado − d)', `${knToKg(res.shear.V).toFixed(0)} kg`)}
-        ${this._specRow('Vc = 0.53√f\'c·b·d', `${knToKg(res.Vc).toFixed(0)} kg`)}
-        ${this._specRow('φVc', `${knToKg(res.phiVc).toFixed(0)} kg`)}
-      </table>
+      <h5 class="text-[11px] font-bold text-slate-600 mt-3 mb-1">Dirección ${label} — voladizo ${res.strip.side}, Lc = ${res.strip.Lc.toFixed(2)} m</h5>
+      <div class="grid grid-cols-2 gap-2 mb-1">
+        ${this._statCard('Vu', `${knToKg(res.shear.V).toFixed(0)} kg`, null, null)}
+        ${this._statCard('φVc', `${knToKg(res.phiVc).toFixed(0)} kg`, null, null)}
+      </div>
       <p class="text-xs font-semibold">Verificación Vu ≤ φVc: ${this._estadoCell(res.pass_shear)}</p>`;
     const step3Html = `
-      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3) Diseño por cortante</h4>
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3) Diseño por cortante (una dirección)</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Verifica el corte tipo "viga ancha" en la sección crítica, ubicada a una distancia "d" de la cara de la columna, en cada dirección de la franja en voladizo (E.060 / ACI 318 22.5).</p>
       <div class="flex flex-col md:flex-row gap-4 items-start">
         <div class="w-full md:flex-1">${shearDir('L', str.L_dir)}${shearDir('B', str.B_dir)}</div>
         <div class="flex justify-center w-full md:w-auto">${this._shearSketchSvg()}</div>
@@ -1342,27 +1364,29 @@ export class AppUIController {
 
     const flexDir = (label, res) => `
       <h5 class="text-[11px] font-bold text-slate-600 mt-2 mb-1">Dirección ${label}</h5>
+      <div class="grid grid-cols-2 gap-2 mb-1">
+        ${this._statCard('Mu', `${kNmToKgm(res.strip.M).toFixed(0)} kg·m`, 'en la cara de la columna', null)}
+        ${this._statCard('As requerido', `${res.flex.As_design.toFixed(2)} cm²`, `${res.As_per_m.toFixed(2)} cm²/m`, null)}
+      </div>
       <table class="text-xs w-full">
-        ${this._specRow('Mu (en la cara de la columna)', `${kNmToKgm(res.strip.M).toFixed(0)} kg·m`)}
-        ${this._specRow('a', `${res.flex.a_cm.toFixed(2)} cm`)}
+        ${this._specRow('Brazo de palanca (a)', `${res.flex.a_cm.toFixed(2)} cm`)}
         ${this._specRow('As calculado', `${res.flex.As_calc.toFixed(2)} cm²`)}
-        ${this._specRow('As mínimo', `${res.flex.As_min.toFixed(2)} cm²`)}
-        ${this._specRow('As requerido', `${res.flex.As_design.toFixed(2)} cm² (${res.As_per_m.toFixed(2)} cm²/m)`)}
+        ${this._specRow('As mínimo (losa, 0.0018·b·h)', `${res.flex.As_min.toFixed(2)} cm²`)}
       </table>`;
     const longDir = str.isLLong ? 'L' : 'B', longRes = str.isLLong ? str.L_dir : str.B_dir;
     const step4Html = `
       <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">4) Diseño por flexión</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Mu = σu·volado²/2 por metro de ancho; As por el bloque de Whitney, con el mayor entre el cálculo y el acero mínimo de losa (0.0018·b·h). El lado corto se reparte en banda central + franjas exteriores (ACI 318 15.4.4); el lado largo, uniforme.</p>
+      <p class="text-[11px] text-slate-500 mb-2">El momento último Mu = σu·volado²/2 se toma en la cara de la columna, en cada dirección; el acero se calcula con el bloque de Whitney, tomando el mayor entre el cálculo y el acero mínimo de losa por retracción y temperatura (0.0018·b·h). El lado corto se reparte en banda central + franjas exteriores (ACI 318 15.4.4); el lado largo va uniforme.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
         <div>${flexDir('L', str.L_dir)}</div>
         <div>${flexDir('B', str.B_dir)}</div>
       </div>
-      <h5 class="text-[11px] font-bold text-slate-600 mt-3 mb-1">Acero elegido</h5>
-      <table class="text-xs w-full">
-        ${this._specRow(`Dirección ${longDir} (uniforme)`, `${str.dbMain.name} @ ${longRes.spacing} cm (${(str.isLLong ? str.L_dir : str.B_dir).As_per_m.toFixed(2)} cm²/m)`)}
-        ${this._specRow('Banda central (lado corto)', `${str.dbMain.name} @ ${str.banding.sp_band} cm (${str.banding.As_band_per_m.toFixed(2)} cm²/m)`)}
-        ${this._specRow('Franjas exteriores (lado corto)', str.banding.sp_outer ? `${str.dbMain.name} @ ${str.banding.sp_outer} cm (${str.banding.As_outer_per_m.toFixed(2)} cm²/m)` : `${str.dbMain.name} @ ${str.banding.sp_band} cm (continúa igual)`)}
-      </table>`;
+      <h5 class="text-xs font-bold text-slate-700 mt-3 mb-1.5">🔩 Acero a colocar</h5>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        ${this._statCard(`Dirección ${longDir} (uniforme)`, `${str.dbMain.name}`, `@ ${longRes.spacing} cm — ${(str.isLLong ? str.L_dir : str.B_dir).As_per_m.toFixed(2)} cm²/m`, true)}
+        ${this._statCard('Banda central (lado corto)', `${str.dbMain.name}`, `@ ${str.banding.sp_band} cm — ${str.banding.As_band_per_m.toFixed(2)} cm²/m`, true)}
+        ${this._statCard('Franjas exteriores (lado corto)', `${str.dbMain.name}`, str.banding.sp_outer ? `@ ${str.banding.sp_outer} cm — ${str.banding.As_outer_per_m.toFixed(2)} cm²/m` : `@ ${str.banding.sp_band} cm (continúa igual)`, true)}
+      </div>`;
 
     return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
       <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">III) DISEÑO</div>
