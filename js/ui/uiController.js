@@ -1231,6 +1231,145 @@ export class AppUIController {
     </div>`;
   }
 
+  /** Boceto esquemático (no a escala) del perímetro crítico de
+   * punzonamiento a d/2 de las caras de la columna. */
+  _punchingSketchSvg() {
+    const strokeFooting = '#334155', fillCol = '#94a3b8', strokeCol = '#1e293b', dim = '#64748b', text = '#334155';
+    return `<svg viewBox="0 0 220 170" width="220" height="170" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+      <rect x="70" y="45" width="80" height="65" fill="none" stroke="${dim}" stroke-width="1.2" stroke-dasharray="4,3"/>
+      <rect x="85" y="60" width="50" height="35" fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.5"/>
+      <text x="110" y="53" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">Sección crítica</text>
+      <line x1="85" y1="60" x2="70" y2="45" stroke="${dim}" stroke-width="1"/>
+      <text x="60" y="42" font-size="8.5" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">d/2</text>
+      <text x="110" y="80" font-size="9" fill="${strokeCol}" text-anchor="middle" font-family="Inter, sans-serif">Columna</text>
+      <line x1="20" y1="45" x2="20" y2="110" stroke="${strokeFooting}" stroke-width="1"/>
+      <line x1="16" y1="45" x2="24" y2="45" stroke="${strokeFooting}" stroke-width="1"/>
+      <line x1="16" y1="110" x2="24" y2="110" stroke="${strokeFooting}" stroke-width="1"/>
+      <text x="12" y="80" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif" transform="rotate(-90 12 80)">B</text>
+      <line x1="70" y1="130" x2="150" y2="130" stroke="${strokeFooting}" stroke-width="1"/>
+      <line x1="70" y1="126" x2="70" y2="134" stroke="${strokeFooting}" stroke-width="1"/>
+      <line x1="150" y1="126" x2="150" y2="134" stroke="${strokeFooting}" stroke-width="1"/>
+      <text x="110" y="145" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">L</text>
+    </svg>`;
+  }
+
+  /** Boceto esquemático (no a escala) de la sección crítica de corte en
+   * una dirección, a "d" de la cara de la columna. */
+  _shearSketchSvg() {
+    const strokeFooting = '#334155', fillFooting = '#e7ebf1', fillCol = '#94a3b8', strokeCol = '#1e293b', dim = '#64748b', text = '#334155';
+    return `<svg viewBox="0 0 220 140" width="220" height="140" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+      <rect x="20" y="70" width="180" height="30" fill="${fillFooting}" stroke="${strokeFooting}" stroke-width="1.5"/>
+      <rect x="90" y="30" width="40" height="40" fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.5"/>
+      <text x="110" y="24" font-size="9" fill="${strokeCol}" text-anchor="middle" font-family="Inter, sans-serif">Columna</text>
+      <line x1="140" y1="30" x2="140" y2="100" stroke="${dim}" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="150" y="20" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">Sección crítica</text>
+      <line x1="130" y1="18" x2="140" y2="28" stroke="${dim}" stroke-width="1"/>
+      <line x1="130" y1="60" x2="140" y2="60" stroke="${dim}" stroke-width="1"/>
+      <line x1="128" y1="56" x2="128" y2="64" stroke="${dim}" stroke-width="1"/>
+      <line x1="142" y1="56" x2="142" y2="64" stroke="${dim}" stroke-width="1"/>
+      <text x="135" y="52" font-size="8.5" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">d</text>
+      <line x1="140" y1="112" x2="200" y2="112" stroke="${strokeFooting}" stroke-width="1"/>
+      <line x1="140" y1="108" x2="140" y2="116" stroke="${strokeFooting}" stroke-width="1"/>
+      <line x1="200" y1="108" x2="200" y2="116" stroke="${strokeFooting}" stroke-width="1"/>
+      <text x="170" y="126" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">Volado</text>
+    </svg>`;
+  }
+
+  /**
+   * Caja "III) DISEÑO" de la zapata aislada, al estilo de la hoja de
+   * cálculo de referencia (Efrén): 1) combinaciones de diseño (ya
+   * calculadas en str.envelope), 2) punzonamiento, 3) corte en una
+   * dirección y 4) flexión — con las direcciones L y B mostradas juntas
+   * (nuestro motor, a diferencia de la hoja de referencia, sí distingue
+   * ambas direcciones para zapatas no cuadradas) y terminando con el
+   * acero finalmente elegido (longitudinal/banda central/franjas
+   * exteriores), igual que la hoja de referencia.
+   */
+  _disenoIsoladaHtml(d, str) {
+    const step1Html = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">1) Combinaciones de diseño</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — aplicadas sobre la presión de contacto en las 4 esquinas de la zapata (con el peso propio aproximado por fz). La más desfavorable se toma como presión de diseño "su", aplicada de forma uniforme sobre toda la zapata.</p>
+      <table class="text-xs w-full border-collapse mb-2">
+        <thead><tr>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">σ (esquina más desfavorable)</th>
+        </tr></thead>
+        <tbody>
+          ${str.envelope.rows.map((r) => `<tr class="odd:bg-sky-50">
+            <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
+            <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <p class="text-xs font-semibold text-slate-800">Combinación gobernante: ${str.envelope.governingRow.label}. σu = ${this._p(str.envelope.su_kgcm2, 3)} (presión de diseño uniforme).</p>`;
+
+    const pn = str.punching;
+    const step2Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2) Diseño por punzonamiento</h4>
+      <div class="flex flex-col md:flex-row gap-4 items-start">
+        <table class="text-xs w-full md:w-auto md:flex-1">
+          ${this._specRow('h', `${d.h.toFixed(2)} m`)}
+          ${this._specRow('d (promedio)', `${pn.d_avg.toFixed(2)} m`)}
+          ${this._specRow('Ao', `${pn.areaWithinPerimeter.toFixed(2)} m²`)}
+          ${this._specRow('bo', `${pn.bo.toFixed(2)} m`)}
+          ${this._specRow('βc', pn.betaC.toFixed(2))}
+          ${this._specRow('Tipo de columna', `${d.col_type} (αs = ${{ interior: 40, medianera: 30, esquinera: 20 }[d.col_type] ?? 40})`)}
+          ${this._specRow('Vu = σu·(A_zapata − Ao)', `${knToKg(pn.Vu).toFixed(0)} kg`)}
+          ${this._specRow('Vc1 = 0.53(1+2/βc)√f\'c·bo·d', `${knToKg(pn.Vc1).toFixed(0)} kg`)}
+          ${this._specRow('Vc2 = 0.27(αs·d/bo+2)√f\'c·bo·d', `${knToKg(pn.Vc2).toFixed(0)} kg`)}
+          ${this._specRow('Vc3 = 1.06√f\'c·bo·d', `${knToKg(pn.Vc3).toFixed(0)} kg`)}
+          ${this._specRow('Vc = mín(Vc1,Vc2,Vc3)', `${knToKg(pn.Vc).toFixed(0)} kg`)}
+          ${this._specRow('φVc', `${knToKg(pn.phiVc).toFixed(0)} kg`)}
+        </table>
+        <div class="flex justify-center w-full md:w-auto">${this._punchingSketchSvg()}</div>
+      </div>
+      <p class="text-xs font-semibold mt-1">Verificación Vu ≤ φVc: ${this._estadoCell(pn.pass)}</p>`;
+
+    const shearDir = (label, res) => `
+      <h5 class="text-[11px] font-bold text-slate-600 mt-2 mb-1">Dirección ${label} (voladizo ${res.strip.side}, Lc = ${res.strip.Lc.toFixed(2)} m)</h5>
+      <table class="text-xs w-full">
+        ${this._specRow('Vu = σu·(volado − d)', `${knToKg(res.shear.V).toFixed(0)} kg`)}
+        ${this._specRow('Vc = 0.53√f\'c·b·d', `${knToKg(res.Vc).toFixed(0)} kg`)}
+        ${this._specRow('φVc', `${knToKg(res.phiVc).toFixed(0)} kg`)}
+      </table>
+      <p class="text-xs font-semibold">Verificación Vu ≤ φVc: ${this._estadoCell(res.pass_shear)}</p>`;
+    const step3Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3) Diseño por cortante</h4>
+      <div class="flex flex-col md:flex-row gap-4 items-start">
+        <div class="w-full md:flex-1">${shearDir('L', str.L_dir)}${shearDir('B', str.B_dir)}</div>
+        <div class="flex justify-center w-full md:w-auto">${this._shearSketchSvg()}</div>
+      </div>`;
+
+    const flexDir = (label, res) => `
+      <h5 class="text-[11px] font-bold text-slate-600 mt-2 mb-1">Dirección ${label}</h5>
+      <table class="text-xs w-full">
+        ${this._specRow('Mu (en la cara de la columna)', `${kNmToKgm(res.strip.M).toFixed(0)} kg·m`)}
+        ${this._specRow('a', `${res.flex.a_cm.toFixed(2)} cm`)}
+        ${this._specRow('As calculado', `${res.flex.As_calc.toFixed(2)} cm²`)}
+        ${this._specRow('As mínimo', `${res.flex.As_min.toFixed(2)} cm²`)}
+        ${this._specRow('As requerido', `${res.flex.As_design.toFixed(2)} cm² (${res.As_per_m.toFixed(2)} cm²/m)`)}
+      </table>`;
+    const longDir = str.isLLong ? 'L' : 'B', longRes = str.isLLong ? str.L_dir : str.B_dir;
+    const step4Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">4) Diseño por flexión</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Mu = σu·volado²/2 por metro de ancho; As por el bloque de Whitney, con el mayor entre el cálculo y el acero mínimo de losa (0.0018·b·h). El lado corto se reparte en banda central + franjas exteriores (ACI 318 15.4.4); el lado largo, uniforme.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+        <div>${flexDir('L', str.L_dir)}</div>
+        <div>${flexDir('B', str.B_dir)}</div>
+      </div>
+      <h5 class="text-[11px] font-bold text-slate-600 mt-3 mb-1">Acero elegido</h5>
+      <table class="text-xs w-full">
+        ${this._specRow(`Dirección ${longDir} (uniforme)`, `${str.dbMain.name} @ ${longRes.spacing} cm (${(str.isLLong ? str.L_dir : str.B_dir).As_per_m.toFixed(2)} cm²/m)`)}
+        ${this._specRow('Banda central (lado corto)', `${str.dbMain.name} @ ${str.banding.sp_band} cm (${str.banding.As_band_per_m.toFixed(2)} cm²/m)`)}
+        ${this._specRow('Franjas exteriores (lado corto)', str.banding.sp_outer ? `${str.dbMain.name} @ ${str.banding.sp_outer} cm (${str.banding.As_outer_per_m.toFixed(2)} cm²/m)` : `${str.dbMain.name} @ ${str.banding.sp_band} cm (continúa igual)`)}
+      </table>`;
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">III) DISEÑO</div>
+      <div class="p-3">${step1Html}${step2Html}${step3Html}${step4Html}</div>
+    </div>`;
+  }
+
   _reportIsolated() {
     const d = this.data.isolated, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
@@ -1241,19 +1380,9 @@ export class AppUIController {
 
     html += this._datosDisenoIsoladaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoIsoladaHtml(d, fnd, mat, geo);
+    html += this._disenoIsoladaHtml(d, str);
 
-    {
-      html += this._sectionTitle(`2. Combinaciones de Diseño (Cargas Factoradas)`);
-      html += `<p class="text-xs text-slate-600 mb-2">Combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — aplicadas sobre la presión de contacto en las 4 esquinas de la zapata (con el peso propio aproximado por fz). La más desfavorable se toma como presión de diseño "su", aplicada de forma <b>uniforme</b> sobre toda la zapata para el diseño por punzonamiento, corte y flexión.</p>`;
-      html += this._table(['Combinación', 'σ (esquina más desfavorable)'], str.envelope.rows.map((r) => [
-        r.label,
-        `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`,
-      ]));
-      html += `<p class="text-xs text-slate-600 mb-3">Combinación gobernante: <b>${str.envelope.governingRow.label}</b>. su = ${this._p(str.envelope.su_kgcm2, 3)} (presión de diseño uniforme).</p>`;
-      html += this._slabReportHtml(str, d.L, d.B, 3);
-    }
-
-    html += this._sectionTitle('4. Cuadro de Habilitación de Acero');
+    html += this._sectionTitle('IV) Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
 
     return html;
