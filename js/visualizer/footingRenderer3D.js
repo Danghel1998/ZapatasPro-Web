@@ -379,12 +379,12 @@ export class FootingRenderer3D {
     const yTransBottom = yBottom + 2 * rMain;
     const yTransTop = yTop - 2 * rMain;
     trans1Xs.forEach((x) => {
-      this._addBarWithHooks(V(x, yTransBottom, -zHalf), V(x, yTransBottom, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m);
-      this._addBarWithHooks(V(x, yTransTop, -zHalf), V(x, yTransTop, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m);
+      this._addBarWithHooks(V(x, yTransBottom, -zHalf), V(x, yTransBottom, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m, true);
+      this._addBarWithHooks(V(x, yTransTop, -zHalf), V(x, yTransTop, zHalf), rTrans, 'trans_col1', dbTrans.diameter_m, false);
     });
     trans2Xs.forEach((x) => {
-      this._addBarWithHooks(V(x, yTransBottom, -zHalf), V(x, yTransBottom, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m);
-      this._addBarWithHooks(V(x, yTransTop, -zHalf), V(x, yTransTop, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m);
+      this._addBarWithHooks(V(x, yTransBottom, -zHalf), V(x, yTransBottom, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m, true);
+      this._addBarWithHooks(V(x, yTransTop, -zHalf), V(x, yTransTop, zHalf), rTrans, 'trans_col2', dbTrans.diameter_m, false);
     });
 
     const yDowelTop = h + stemH - cover;
