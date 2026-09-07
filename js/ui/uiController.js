@@ -1458,7 +1458,6 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA AISLADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
-    html += this._isometricoImgHtml();
 
     html += this._datosDisenoIsoladaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoIsoladaHtml(d, fnd, mat, geo);
@@ -1466,6 +1465,8 @@ export class AppUIController {
 
     html += this._sectionTitle('IV) Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
+
+    html += this._isometricoImgHtml();
 
     return html;
   }
@@ -1476,7 +1477,6 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA COMBINADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
-    html += this._isometricoImgHtml();
 
     html += this._sectionTitle('1. Datos de Entrada');
     html += this._table(['Parámetro', 'Valor'], [
@@ -1557,6 +1557,8 @@ export class AppUIController {
 
     html += this._sectionTitle('10. Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
+
+    html += this._isometricoImgHtml();
 
     return html;
   }
@@ -1833,7 +1835,6 @@ export class AppUIController {
     let html = `<h1 class="text-xl font-extrabold text-slate-900 mb-1">MEMORIA DE CÁLCULO — ZAPATA CONECTADA</h1>
       <p class="text-xs text-slate-500 mb-4">Norma E.060 (Concreto Armado) / E.050 (Suelos y Cimentaciones) — RNE, Perú</p>`;
     html += this._cajetinBlockHtml();
-    html += this._isometricoImgHtml();
 
     html += this._datosDisenoConectadaHtml(d, fnd, mat, geo.hasSeismic);
     html += this._predimensionamientoConectadaHtml(d, fnd, mat, geo);
@@ -1872,6 +1873,8 @@ export class AppUIController {
 
     html += this._sectionTitle('6. Cuadro de Habilitación de Acero');
     html += this._rebarTableHtml();
+
+    html += this._isometricoImgHtml();
 
     return html;
   }
