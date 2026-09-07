@@ -63,18 +63,45 @@ export const DEFAULT_FOOTING_DATA = {
     col_type: 'interior',
   },
 
-  // ---- Zapata Combinada (2 columnas, ancho B constante) ----
+  // ---- Zapata Combinada (2 columnas, ancho B constante — losa rígida
+  // única que abarca ambas columnas, distinta de la Zapata Conectada que
+  // usa una viga de conexión independiente). La columna 1 está al ras del
+  // borde izquierdo de la zapata (medianera); la columna 2 es interior.
+  //
+  // Valores por defecto = caso de verificación de la hoja de cálculo real
+  // de referencia (Efrén, "ZAPATA COMBINADA.xlsx"), columna 1 medianera
+  // 1.50×0.25, columna 2 interior 0.60×0.40. Mismo esquema Mx/My que la
+  // zapata aislada y conectada: Mx produce excentricidad en la dirección
+  // B (transversal), My en la dirección L (longitudinal, a lo largo del
+  // eje de columnas).
   combined: {
-    L: 5.60,        // longitud total de la zapata (m), a lo largo del eje de columnas
-    B: 2.00,        // ancho de la zapata (m)
-    h: 0.60,        // peralte total
-    a1: 0.50,       // distancia del borde izquierdo de la zapata al eje de la columna 1
-    s: 4.50,        // separación entre ejes de columna 1 y columna 2
-    col1_L: 0.40, col1_B: 0.40,
-    col2_L: 0.45, col2_B: 0.45,
-    Df: 1.60,
-    P1d: 40.0, P1l: 20.0, // columna 1: carga muerta / viva de servicio (tn)
-    P2d: 55.0, P2l: 25.0, // columna 2
+    L: 5.65,                      // longitud total de la zapata (m), a lo largo del eje de columnas
+    B: 2.404679867256637,         // ancho de la zapata (m)
+    h: 0.80,                      // peralte total (d = h − 0.10 m = 0.70 m, misma convención que aislada/conectada)
+    a1: 0.75,                     // distancia del borde izquierdo de la zapata al eje de la columna 1 (= col1_L/2, columna al ras del borde)
+    s: 3.55,                      // separación entre EJES de columna 1 y columna 2 (col1_L/2 + distancia libre + col2_L/2)
+    col1_L: 1.50, col1_B: 0.25,
+    col2_L: 0.60, col2_B: 0.40,
+    Df: 2.50,
+    // Cargas de servicio por columna (tn / tn·m) — Mx produce excentricidad
+    // en la dirección B, My en la dirección L. El sismo se ingresa como un
+    // caso de servicio propio (SXD/SYD), sin descomponer en muerta/viva.
+    P1d: 31.3515, P1l: 9.9239,
+    Mx1_d: 0.0042, Mx1_l: 0.1477, My1_d: 0.0622, My1_l: 0.0012,
+    Psx1: 12.9708, Mx1_sx: 0.0, My1_sx: 1.5486,
+    Psy1: 10.4481, Mx1_sy: 6.5768, My1_sy: 0.0,
+    P2d: 21.5967, P2l: 5.1202,
+    Mx2_d: 0.1926, Mx2_l: 0.0625, My2_d: 0.3375, My2_l: 0.0713,
+    Psx2: 17.989, Mx2_sx: 0.0, My2_sx: 4.1171,
+    Psy2: 11.1376, Mx2_sy: 0.3386, My2_sy: 0.0,
+    // Incremento admisible en la capacidad portante para combinaciones que
+    // incluyen sismo (E.030) — 1.25, misma convención que aislada/conectada.
+    seismic_bearing_factor: 1.25,
+    // Factor de peso propio estimado ("k"/"fz" de la hoja de referencia):
+    // sustituye el cálculo del peso propio real — la carga axial de
+    // gravedad se infla por (1+fz) en el predimensionamiento y en la
+    // envolvente de presiones de contacto.
+    fz: 0.1,
   },
 
   // ---- Zapata Conectada (excéntrica + interior, unidas por viga de
@@ -197,12 +224,12 @@ export const PRESET_PROJECTS = {
     })()
   },
   zapata_combinada_tipica: {
-    title: 'Zapata Combinada — 2 Columnas (Columna de Borde + Columna Interior)',
-    desc: 'Caso clásico: columna 1 al borde de propiedad (no admite zapata aislada) + columna 2 interior, unidas por una zapata combinada rectangular.',
+    title: 'Zapata Combinada — Caso de Verificación (Efrén)',
+    desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por una losa rígida única — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA COMBINADA.xlsx".',
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'combinada';
-      d.foundation.q_adm_kgcm2 = 2.0;
+      d.foundation.q_adm_kgcm2 = 0.8;
       return d;
     })()
   },

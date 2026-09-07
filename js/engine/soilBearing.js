@@ -6,8 +6,8 @@
  * el peso propio de la zapata y del relleno sobre ella.
  */
 
-import { tnToKn, knToTn, kgcm2ToKpa, kpaToKgcm2, kgm3ToKnm3 } from './units.js';
-import { evaluateEnvelope, simplifyConnectedRect } from './seismicEnvelope.js';
+import { tnToKn, knToTn, kgcm2ToKpa, kpaToKgcm2 } from './units.js';
+import { evaluateEnvelope, simplifyConnectedRect, cornerPressures } from './seismicEnvelope.js';
 
 /**
  * Verificación geotécnica de una zapata AISLADA (rectángulo L × B). Cuando
@@ -119,60 +119,126 @@ export function calculateIsolatedBearing(footingData) {
 
 /**
  * Verificación geotécnica de una zapata COMBINADA (2 columnas, ancho B
- * constante). La excentricidad se evalúa solo a lo largo de L (eje de
- * columnas); se asume carga centrada en la dirección B.
+ * constante — losa rígida única). Igual que la zapata aislada, la presión
+ * de contacto es BIAXIAL: el momento longitudinal (a lo largo de L) viene
+ * del momento propio de cada columna MÁS el "brazo" de su posición
+ * respecto al centro de la zapata (P1·(a1−L/2) + P2·(a2−L/2)); el momento
+ * transversal (a lo largo de B) viene solo del momento propio de cada
+ * columna (se asume ambas centradas en B). El peso propio se aproxima con
+ * el factor "fz" (ver evaluateEnvelope) en vez de calcularlo con la
+ * geometría real — mismo criterio que la hoja de cálculo real de
+ * referencia (Efrén, "ZAPATA COMBINADA.xlsx"): A = R(1+k)/s. Si hay datos
+ * de sismo, se evalúa además la envolvente de 5 combinaciones de servicio
+ * (CM+CV, CM+CV±SXD, CM+CV±SYD) — mismo criterio que la zapata aislada.
  */
 export function calculateCombinedBearing(footingData) {
-  const { combined, foundation, materials } = footingData;
+  const { combined, foundation } = footingData;
   const { L, B, h, a1, s, Df } = combined;
+  const a2 = a1 + s;
 
-  const gamma_s = kgm3ToKnm3(foundation.gamma_kgm3);
-  const gamma_c = kgm3ToKnm3(materials.gamma_c_kgm3);
   const q_adm = kgcm2ToKpa(foundation.q_adm_kgcm2);
+  const fz = combined.fz ?? 0.1;
 
   const P1 = tnToKn(combined.P1d + combined.P1l);
   const P2 = tnToKn(combined.P2d + combined.P2l);
   const R = P1 + P2;
-
   const A = L * B;
-  const W_footing = gamma_c * A * h;
-  const W_soil = gamma_s * A * Math.max(0, Df - h);
-  const N = R + W_footing + W_soil;
+  const N = R * (1 + fz);
 
-  const x_R = R > 0.001 ? (P1 * a1 + P2 * (a1 + s)) / R : L / 2;
-  const x_N = N > 0.001 ? (R * x_R + (W_footing + W_soil) * (L / 2)) / N : L / 2;
-  const e = x_N - L / 2;
+  const My1own = tnToKn((combined.My1_d || 0) + (combined.My1_l || 0));
+  const My2own = tnToKn((combined.My2_d || 0) + (combined.My2_l || 0));
+  const Mx1own = tnToKn((combined.Mx1_d || 0) + (combined.Mx1_l || 0));
+  const Mx2own = tnToKn((combined.Mx2_d || 0) + (combined.Mx2_l || 0));
+
+  // Momento longitudinal total (causa gradiente en L) y transversal total
+  // (causa gradiente en B), bajo cargas de servicio SIN sismo.
+  const My_L = My1own + My2own + P1 * (a1 - L / 2) + P2 * (a2 - L / 2);
+  const Mx_B = Mx1own + Mx2own;
+
+  const x_R = R > 0.001 ? L / 2 + My_L / R : L / 2;
+  const e = R > 0.001 ? My_L / R : 0;
   const e_max = L / 6.0;
   const within_kern = Math.abs(e) <= e_max;
 
-  let q_max, q_min, effective_note = null;
-  if (within_kern) {
-    const q0 = N / A;
-    q_max = q0 * (1 + 6 * Math.abs(e) / L);
-    q_min = q0 * (1 - 6 * Math.abs(e) / L);
-  } else {
+  // cornerPressures(N, Mx, My, L, B): su 1er momento causa gradiente en L
+  // (nuestro My_L), el 2° causa gradiente en B (nuestro Mx_B) — misma
+  // convención ya usada por la zapata conectada.
+  const corners = cornerPressures(N, My_L, Mx_B, L, B);
+  const cornerVals = Object.values(corners);
+  let q_max = Math.max(...cornerVals), q_min = Math.min(...cornerVals);
+  let effective_note = null;
+  if (q_min < 0) {
     const L_eff = Math.max(0.1, 3 * (L / 2 - Math.abs(e)));
     q_max = (2 * N) / (L_eff * B);
     q_min = 0;
-    effective_note = `La excentricidad (e = ${e.toFixed(3)} m) cae fuera del tercio medio (L/6 = ${e_max.toFixed(3)} m) — ajusta "a1" (posición) o el largo L para acercar el centroide de la zapata a la resultante de cargas.`;
+    effective_note = `La excentricidad longitudinal (e = ${e.toFixed(3)} m) cae fuera del tercio medio (L/6 = ${e_max.toFixed(3)} m) — se estima de forma aproximada y conservadora con un área efectiva. Ajusta "a1"/"s" (posición) o el largo L para acercar el centroide de la zapata a la resultante de cargas.`;
   }
 
-  const pass_bearing = q_max <= q_adm;
+  const hasSeismic = Math.abs(combined.Psx1 || 0) > 1e-9 || Math.abs(combined.Psx2 || 0) > 1e-9
+    || Math.abs(combined.Psy1 || 0) > 1e-9 || Math.abs(combined.Psy2 || 0) > 1e-9
+    || Math.abs(combined.Mx1_sx || 0) > 1e-9 || Math.abs(combined.My1_sx || 0) > 1e-9
+    || Math.abs(combined.Mx2_sx || 0) > 1e-9 || Math.abs(combined.My2_sx || 0) > 1e-9
+    || Math.abs(combined.Mx1_sy || 0) > 1e-9 || Math.abs(combined.My1_sy || 0) > 1e-9
+    || Math.abs(combined.Mx2_sy || 0) > 1e-9 || Math.abs(combined.My2_sy || 0) > 1e-9;
+
+  const q_adm_seismic = q_adm * (combined.seismic_bearing_factor || 1.25);
+  const q_adm_eff = hasSeismic ? q_adm_seismic : q_adm;
+  const pass_bearing = q_max <= q_adm_eff;
+
+  let seismic_envelope = null;
+  if (hasSeismic) {
+    const Psx1 = tnToKn(combined.Psx1 || 0), Mx1sx = tnToKn(combined.Mx1_sx || 0), My1sx = tnToKn(combined.My1_sx || 0);
+    const Psx2 = tnToKn(combined.Psx2 || 0), Mx2sx = tnToKn(combined.Mx2_sx || 0), My2sx = tnToKn(combined.My2_sx || 0);
+    const Psy1 = tnToKn(combined.Psy1 || 0), Mx1sy = tnToKn(combined.Mx1_sy || 0), My1sy = tnToKn(combined.My1_sy || 0);
+    const Psy2 = tnToKn(combined.Psy2 || 0), Mx2sy = tnToKn(combined.Mx2_sy || 0), My2sy = tnToKn(combined.My2_sy || 0);
+
+    /** Construye un caso de servicio: P1c/P2c (con sismo axial, sign·±)
+     * se usan para el "brazo" de posición del momento longitudinal —
+     * cálculo riguroso por caso, en vez de reutilizar una excentricidad
+     * fija de un solo caso de referencia (a diferencia de la hoja de
+     * cálculo original). */
+    function buildCase(label, Pseis1, Pseis2, Mx1seis, Mx2seis, My1seis, My2seis) {
+      const P1c = P1 + Pseis1, P2c = P2 + Pseis2;
+      const My_L_case = My1own + My2own + My1seis + My2seis + P1c * (a1 - L / 2) + P2c * (a2 - L / 2);
+      const Mx_B_case = Mx1own + Mx2own + Mx1seis + Mx2seis;
+      return { label, Pgrav: R, Pseis: Pseis1 + Pseis2, Mx: My_L_case, My: Mx_B_case, fz, limit: q_adm_seismic };
+    }
+    const cases = [
+      buildCase('CM+CV', 0, 0, 0, 0, 0, 0),
+      buildCase('CM+CV+SXD', Psx1, Psx2, Mx1sx, Mx2sx, My1sx, My2sx),
+      buildCase('CM+CV−SXD', -Psx1, -Psx2, -Mx1sx, -Mx2sx, -My1sx, -My2sx),
+      buildCase('CM+CV+SYD', Psy1, Psy2, Mx1sy, Mx2sy, My1sy, My2sy),
+      buildCase('CM+CV−SYD', -Psy1, -Psy2, -Mx1sy, -Mx2sy, -My1sy, -My2sy),
+    ];
+    const env = evaluateEnvelope(cases, L, B);
+    seismic_envelope = {
+      rows: env.rows.map((r) => ({ ...r, q_governing_kgcm2: kpaToKgcm2(r.q_governing), limit_kgcm2: kpaToKgcm2(r.limit) })),
+      uses_rectangular: env.uses_rectangular,
+      governing_q: env.governing_q,
+      governing_q_kgcm2: kpaToKgcm2(env.governing_q),
+      governingRow: env.governingRow,
+      pass: env.rows.every((r) => r.pass),
+    };
+  }
 
   return {
     L, B, h, A, Df, a1, s,
     P1_tn: combined.P1d + combined.P1l,
     P2_tn: combined.P2d + combined.P2l,
     R, R_tn: knToTn(R), N, N_tn: knToTn(N),
-    W_footing_tn: knToTn(W_footing), W_soil_tn: knToTn(W_soil),
-    x_R, x_N, e, e_max, within_kern,
+    fz, selfWeight_equiv_tn: knToTn(N) - knToTn(R),
+    x_R, x_N: x_R, e, e_max, within_kern,
+    My_L, Mx_B,
     q_max, q_min,
     q_max_kgcm2: kpaToKgcm2(q_max),
     q_min_kgcm2: kpaToKgcm2(q_min),
     q_adm, q_adm_kgcm2: foundation.q_adm_kgcm2,
-    pass_bearing,
+    q_adm_eff_kgcm2: kpaToKgcm2(q_adm_eff),
+    hasSeismic, seismic_envelope,
+    pass_bearing: hasSeismic ? seismic_envelope.pass : pass_bearing,
+    within_kern,
     effective_note,
-    pass_all: pass_bearing && within_kern,
+    pass_all: (hasSeismic ? seismic_envelope.pass : pass_bearing) && within_kern,
   };
 }
 

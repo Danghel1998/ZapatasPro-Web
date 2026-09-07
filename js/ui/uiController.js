@@ -326,29 +326,6 @@ export class AppUIController {
     if (predimConectadaBtn) predimConectadaBtn.addEventListener('click', () => this.predimensionConnected());
   }
 
-  /** Área requerida (m²), método del curso UNI "Concreto Armado 2"
-   * (ecuación 2-4): A ≥ 1.075(PCM+PCV)/(0.9·q_adm) — el 0.9 deja un margen
-   * del 10% de la capacidad admisible sin usar en el predimensionamiento.
-   * Se itera hasta converger: primera estimación con el 1.075 fijo del
-   * curso (una aproximación razonable antes de conocer L,B), y desde la
-   * segunda vuelta con el peso propio REAL (zapata + relleno) de la
-   * geometría resultante en cada paso — más preciso una vez que L,B ya se
-   * conocen, y necesario porque el 1.075 fijo puede quedarse corto en
-   * zapatas con desplante profundo frente a su tamaño. */
-  _iterateArea(P_tn, h, Df, gamma_c_tnm3, gamma_s_tnm3, solveLB) {
-    const qAdmEff = 0.9 * this._qAdmTnm2();
-    let A_req = (P_tn * 1.075) / qAdmEff;
-    let L, B;
-    for (let iter = 0; iter < 6; iter++) {
-      ({ L, B } = solveLB(A_req));
-      const selfWeight = gamma_c_tnm3 * (L * B) * h + gamma_s_tnm3 * (L * B) * Math.max(0, Df - h);
-      const A_next = (P_tn + selfWeight) / qAdmEff;
-      if (Math.abs(A_next - A_req) < 1e-6) { A_req = A_next; break; }
-      A_req = A_next;
-    }
-    return { L, B };
-  }
-
   _qAdmTnm2() {
     return (this.data.foundation.q_adm_kgcm2 || 1) * 10;
   }
@@ -399,25 +376,30 @@ export class AppUIController {
   }
 
   /**
-   * Predimensionamiento de zapata combinada: L se fija para que el
-   * centroide de la zapata coincida con la resultante de cargas de
-   * servicio (excentricidad nula, e=0 en calculateCombinedBearing), dados
-   * a1 y s; B se resuelve por área requerida, iterando con el peso propio
-   * real. Mismo criterio de la hoja de cálculo/curso UNI para el
-   * dimensionamiento de zapatas combinadas.
+   * Predimensionamiento de zapata combinada — hoja de cálculo de
+   * referencia (Efrén, "ZAPATA COMBINADA.xlsx"), en un solo paso (sin
+   * iterar, el factor "fz" ya aproxima el peso propio):
+   *   1. Centroide de cargas de servicio (sin sismo), medido desde el
+   *      borde izquierdo: x̄ = a1 + (P2·s + My1 + My2)/(P1+P2), donde "s"
+   *      es la distancia entre EJES de columna (a1 ya ubica la columna 1;
+   *      My1/My2 son los momentos propios longitudinales de cada columna).
+   *   2. L = 2·x̄ (zapata centrada en la resultante, excentricidad nula).
+   *   3. B por área requerida: A = (P1+P2)(1+fz)/q_adm.
    */
   predimensionCombined() {
-    const { combined, foundation, materials } = this.data;
+    const { combined, foundation } = this.data;
     const P1 = (combined.P1d || 0) + (combined.P1l || 0);
     const P2 = (combined.P2d || 0) + (combined.P2l || 0);
     if (P1 + P2 <= 0) return;
-    const gamma_c_tnm3 = (materials.gamma_c_kgm3 || 2400) / 1000;
-    const gamma_s_tnm3 = (foundation.gamma_kgm3 || 1800) / 1000;
-    const h = combined.h || 0.5, Df = combined.Df || 1.5;
+    const fz = combined.fz ?? 0.1;
+    const qAdmTnm2 = this._qAdmTnm2();
+    const My1 = (combined.My1_d || 0) + (combined.My1_l || 0);
+    const My2 = (combined.My2_d || 0) + (combined.My2_l || 0);
 
-    const x_R = combined.a1 + (P2 * combined.s) / (P1 + P2);
+    const x_R = combined.a1 + (P2 * combined.s + My1 + My2) / (P1 + P2);
     const L = Math.ceil((2 * x_R) / 0.05) * 0.05;
-    const { B } = this._iterateArea(P1 + P2, h, Df, gamma_c_tnm3, gamma_s_tnm3, (A_req) => ({ L, B: Math.ceil((A_req / L) / 0.05) * 0.05 }));
+    const A_req = (P1 + P2) * (1 + fz) / qAdmTnm2;
+    const B = Math.ceil((A_req / L) / 0.05) * 0.05;
 
     combined.L = Math.round(L * 100) / 100;
     combined.B = Math.round(B * 100) / 100;
@@ -1485,23 +1467,43 @@ export class AppUIController {
       ['Posición Columna 1 (a1) / Columna 2 (a1+s)', `${d.a1.toFixed(2)} m / ${(d.a1 + d.s).toFixed(2)} m`],
       ['Columna 1 (col1_L × col1_B)', `${d.col1_L.toFixed(2)} × ${d.col1_B.toFixed(2)} m`],
       ['Columna 2 (col2_L × col2_B)', `${d.col2_L.toFixed(2)} × ${d.col2_B.toFixed(2)} m`],
-      ['Carga de servicio Columna 1 (D/L)', `${d.P1d.toFixed(1)} / ${d.P1l.toFixed(1)} tn`],
-      ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(1)} / ${d.P2l.toFixed(1)} tn`],
+      ['Carga de servicio Columna 1 (D/L)', `${d.P1d.toFixed(2)} / ${d.P1l.toFixed(2)} tn`],
+      ['Momento Mx / My Columna 1 (D+L)', `${((d.Mx1_d || 0) + (d.Mx1_l || 0)).toFixed(3)} / ${((d.My1_d || 0) + (d.My1_l || 0)).toFixed(3)} tn·m`],
+      ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(2)} / ${d.P2l.toFixed(2)} tn`],
+      ['Momento Mx / My Columna 2 (D+L)', `${((d.Mx2_d || 0) + (d.Mx2_l || 0)).toFixed(3)} / ${((d.My2_d || 0) + (d.My2_l || 0)).toFixed(3)} tn·m`],
       ['Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2)],
       [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
+      ['Factor de peso propio (fz)', d.fz.toFixed(2)],
     ]);
+    if (geo.hasSeismic) {
+      html += this._table(['Sismo por columna', 'P', 'Mx', 'My'], [
+        ['Columna 1 — SXD', `${(d.Psx1 || 0).toFixed(2)} tn`, `${(d.Mx1_sx || 0).toFixed(3)} tn·m`, `${(d.My1_sx || 0).toFixed(3)} tn·m`],
+        ['Columna 1 — SYD', `${(d.Psy1 || 0).toFixed(2)} tn`, `${(d.Mx1_sy || 0).toFixed(3)} tn·m`, `${(d.My1_sy || 0).toFixed(3)} tn·m`],
+        ['Columna 2 — SXD', `${(d.Psx2 || 0).toFixed(2)} tn`, `${(d.Mx2_sx || 0).toFixed(3)} tn·m`, `${(d.My2_sx || 0).toFixed(3)} tn·m`],
+        ['Columna 2 — SYD', `${(d.Psy2 || 0).toFixed(2)} tn`, `${(d.Mx2_sy || 0).toFixed(3)} tn·m`, `${(d.My2_sy || 0).toFixed(3)} tn·m`],
+      ]);
+    }
 
     html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio)');
-    html += `<p class="text-xs text-slate-600 mb-2">Resultante de columnas R = ${geo.R_tn.toFixed(2)} tn, ubicada a x̄ = ${geo.x_R.toFixed(3)} m del borde izquierdo. Con el peso propio, la resultante total N = ${geo.N_tn.toFixed(2)} tn actúa a x_N = ${geo.x_N.toFixed(3)} m (centro geométrico de la zapata en L/2 = ${(d.L / 2).toFixed(3)} m).</p>`;
+    html += `<p class="text-xs text-slate-600 mb-2">Presión de contacto biaxial: σ = N/(B·L) ± 6·My_L/(B·L²) ± 6·Mx_B/(L·B²), con N = R·(1+fz) (fz = ${geo.fz.toFixed(2)}), My_L = momento longitudinal total (propio de cada columna + brazo de su posición respecto al centro de la zapata) y Mx_B = momento transversal total (propio de cada columna). Excentricidad longitudinal e = My_L/R = ${(geo.e * 100).toFixed(2)} cm.</p>`;
     html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
-      ['Excentricidad e = x_N − L/2', `${(geo.e * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.e_max * 100).toFixed(2)} cm`, this._badgeHtml(geo.within_kern)],
-      ['Presión máxima de contacto q_max', this._p(geo.q_max_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.pass_bearing)],
+      ['Excentricidad longitudinal e', `${(geo.e * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.e_max * 100).toFixed(2)} cm`, this._badgeHtml(geo.within_kern)],
+      [`Presión máxima de contacto q_max${geo.hasSeismic ? ' (sin sismo)' : ''}`, this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, this._badgeHtml(geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)],
     ]);
     if (geo.effective_note) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ ${geo.effective_note}</p>`;
+    if (geo.hasSeismic) {
+      html += `<p class="text-xs text-slate-600 mb-2"><b>Envolvente sísmica de servicio</b> (CM+CV, CM+CV±SXD, CM+CV±SYD), limitada a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm:</p>`;
+      html += this._table(['Combinación', 'q (esquina más desfavorable)', 'Límite', 'Estado'],
+        geo.seismic_envelope.rows.map((r) => [r.label, `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`, `≤ ${this._p(r.limit_kgcm2)}`, this._badgeHtml(r.pass)]));
+      html += `<p class="text-xs text-slate-500 mb-3">Combinación gobernante: <b>${geo.seismic_envelope.governingRow.label}</b>, q = ${this._p(geo.seismic_envelope.governing_q_kgcm2)}.</p>`;
+    }
 
-    html += this._sectionTitle('3. Análisis Longitudinal (Viga Invertida) — Cargas Factoradas');
+    html += this._sectionTitle('3. Envolvente de Presión Factorada y Análisis Longitudinal');
     const LF_D = this.data.safety_req.LF_D ?? 1.4, LF_L = this.data.safety_req.LF_L ?? 1.7;
-    html += `<p class="text-xs text-slate-600 mb-2">Pu1 = ${knToKg(str.Pu1).toFixed(0)} kg, Pu2 = ${knToKg(str.Pu2).toFixed(0)} kg (U = ${LF_D}D + ${LF_L}L). Momento máximo positivo (voladizos, tracción inferior) M+ = ${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m en x = ${str.x_pos.toFixed(2)} m. Momento máximo negativo (entre columnas, tracción superior) M− = ${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m en x = ${str.x_neg.toFixed(2)} m.</p>`;
+    html += `<p class="text-xs text-slate-600 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ` (U = ${LF_D}D + ${LF_L}L)`} — y se evalúa la presión de contacto biaxial de toda la losa para cada una. La más desfavorable se toma como la presión de diseño "su", aplicada de forma uniforme sobre toda la zapata para punzonamiento y las franjas en voladizo transversal.</p>`;
+    html += this._table(['Combinación', 'su (esquina más desfavorable)'],
+      str.envelope.rows.map((r) => [`${r.label}${r.label === str.envelope.governingRow.label ? ' ⟵ gobierna' : ''}`, `${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}`]));
+    html += `<p class="text-xs text-slate-600 mb-2">su = ${this._p(str.envelope.su_kgcm2, 3)}. Para el acero longitudinal y el corte en dirección L, la losa se analiza como "viga invertida" de ancho B (reacción distribuida hacia arriba, cargas puntuales de columna hacia abajo) para cada combinación factorada — envolvente: Pu1 = ${knToKg(str.Pu1).toFixed(0)} kg, Pu2 = ${knToKg(str.Pu2).toFixed(0)} kg. Momento máximo positivo (voladizos, tracción inferior) M+ = ${kNmToKgm(str.Mu_pos).toFixed(0)} kg·m en x = ${str.x_pos.toFixed(2)} m. Momento máximo negativo (entre columnas, tracción superior) M− = ${kNmToKgm(str.Mu_neg).toFixed(0)} kg·m en x = ${str.x_neg.toFixed(2)} m.</p>`;
 
     html += this._sectionTitle('4. Acero Longitudinal Principal');
     html += this._table(['', 'Inferior (M+)', 'Superior (M−)'], [
@@ -1518,8 +1520,9 @@ export class AppUIController {
     if (str.perimetersOverlap) html += `<p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">⚠️ Los perímetros críticos de punzonamiento de ambas columnas se traslapan (separación libre ${str.halfGapAvailable.toFixed(2)} m &lt; d = ${str.d_main.toFixed(2)} m) — se recomienda un análisis conjunto del perímetro combinado.</p>`;
     [['Columna 1', str.punch1], ['Columna 2', str.punch2]].forEach(([label, p]) => {
       html += this._table(['', label], [
+        ['Tipo de columna (según distancia al borde)', `${p.colType} (αs=${p.alphaS})`],
         ['bo (perímetro crítico)', `${(p.bo * 100).toFixed(1)} cm`],
-        ['Vu', `${knToKg(p.Vu).toFixed(0)} kg`],
+        ['Vu = su·(Área total − Área crítica)', `${knToKg(p.Vu).toFixed(0)} kg`],
         ['φVc', `${knToKg(p.phiVc).toFixed(0)} kg`],
         ['Estado', this._badgeHtml(p.pass)],
       ]);
@@ -1528,7 +1531,7 @@ export class AppUIController {
     html += this._sectionTitle('7. Acero Transversal Bajo Cada Columna');
     html += this._table(['', 'Columna 1', 'Columna 2'], [
       ['Voladizo transversal', `${str.trans1.voladizo.toFixed(3)} m`, `${str.trans2.voladizo.toFixed(3)} m`],
-      ['Presión local q_u', `${(str.trans1.q_local).toFixed(1)} kPa`, `${(str.trans2.q_local).toFixed(1)} kPa`],
+      ['Presión de diseño (su, uniforme)', `${(str.trans1.q_local).toFixed(1)} kPa`, `${(str.trans2.q_local).toFixed(1)} kPa`],
       ['Momento Mu', `${kNmToKgm(str.trans1.Mu).toFixed(0)} kg·m/m`, `${kNmToKgm(str.trans2.Mu).toFixed(0)} kg·m/m`],
       ['As requerido', `${str.trans1.flex.As_design.toFixed(2)} cm²/m`, `${str.trans2.flex.As_design.toFixed(2)} cm²/m`],
       ['Armado colocado', `${str.dbTrans.name} @ ${str.trans1.spacing} cm`, `${str.dbTrans.name} @ ${str.trans2.spacing} cm`],

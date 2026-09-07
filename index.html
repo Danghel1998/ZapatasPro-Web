@@ -212,25 +212,97 @@
                   <div class="flex gap-1"><input type="number" step="0.05" class="eng-raw-input w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col2_L">
                   <input type="number" step="0.05" class="eng-raw-input w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded" data-bind="combined.col2_B"></div></div>
               </div>
+              <div class="eng-input-group"><label class="eng-label"><span>Factor de peso propio</span><span class="eng-symbol">(fz)</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.01" min="0" max="0.3" class="eng-cell-input" data-bind="combined.fz"></div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Factor admisible con sismo</span></label>
+                <div class="eng-cell-wrapper"><input type="number" step="0.05" min="1" max="1.5" class="eng-cell-input" data-bind="combined.seismic_bearing_factor"><span class="eng-unit-badge">× q_adm</span></div></div>
               <button id="btn-predim-combinada" type="button" class="w-full mt-1 px-2 py-1.5 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[11px] font-semibold transition">📐 Predimensionar L y B a partir del área requerida</button>
-              <p class="text-[10px] text-slate-500">Calcula L para que el centroide de la zapata coincida con la resultante de cargas (excentricidad nula bajo cargas de servicio, dados a1 y s), y B por área requerida A = (P1+P2+peso propio)/q_adm — itera con el peso propio real de la geometría resultante.</p>
+              <p class="text-[10px] text-slate-500">x̄ = a1 + (P2·s + My1+My2)/(P1+P2) (centroide de cargas, medido desde el borde izquierdo); L = 2x̄ (zapata centrada, excentricidad nula); B por área requerida A = (P1+P2)(1+fz)/q_adm.</p>
             </div>
           </div>
 
           <div class="only-combinada eng-card hidden">
             <div class="eng-card-header">
-              <span class="eng-card-title text-amber-950"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Cargas de Servicio</span>
+              <span class="eng-card-title text-amber-950"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Cargas de Servicio — Columna 1 (medianera)</span>
             </div>
             <div class="space-y-1">
-              <div class="eng-input-group"><label class="eng-label"><span>Columna 1 — muerta / viva</span></label>
+              <div class="eng-input-group"><label class="eng-label"><span>Carga muerta / viva</span></label>
                 <div class="flex gap-1">
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P1d"></div>
                   <div class="eng-cell-wrapper" style="width:7rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P1l"><span class="eng-unit-badge">tn</span></div>
                 </div></div>
-              <div class="eng-input-group"><label class="eng-label"><span>Columna 2 — muerta / viva</span></label>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento Mx (transversal) — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.Mx1_d"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.Mx1_l"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento My (longitudinal) — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.My1_d"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.My1_l"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+            </div>
+          </div>
+
+          <div class="only-combinada eng-card hidden">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-rose-950"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Cargas de Sismo — Columna 1 (opcional)</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Sismo X — P / Mx / My</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Psx1"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Mx1_sx"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.My1_sx"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Sismo Y — P / Mx / My</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Psy1"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Mx1_sy"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.My1_sy"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+            </div>
+          </div>
+
+          <div class="only-combinada eng-card hidden">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-amber-950"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Cargas de Servicio — Columna 2 (interior)</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Carga muerta / viva</span></label>
                 <div class="flex gap-1">
                   <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P2d"></div>
                   <div class="eng-cell-wrapper" style="width:7rem"><input type="number" step="1" class="eng-cell-input" data-bind="combined.P2l"><span class="eng-unit-badge">tn</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento Mx (transversal) — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.Mx2_d"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.Mx2_l"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Momento My (longitudinal) — muerta / viva</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.My2_d"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.01" class="eng-cell-input" data-bind="combined.My2_l"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+            </div>
+          </div>
+
+          <div class="only-combinada eng-card hidden">
+            <div class="eng-card-header">
+              <span class="eng-card-title text-rose-950"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Cargas de Sismo — Columna 2 (opcional)</span>
+            </div>
+            <div class="space-y-1">
+              <div class="eng-input-group"><label class="eng-label"><span>Sismo X — P / Mx / My</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Psx2"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Mx2_sx"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.My2_sx"><span class="eng-unit-badge">tn·m</span></div>
+                </div></div>
+              <div class="eng-input-group"><label class="eng-label"><span>Sismo Y — P / Mx / My</span></label>
+                <div class="flex gap-1">
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Psy2"></div>
+                  <div class="eng-cell-wrapper" style="width:5rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.Mx2_sy"></div>
+                  <div class="eng-cell-wrapper" style="width:8rem"><input type="number" step="0.1" class="eng-cell-input" data-bind="combined.My2_sy"><span class="eng-unit-badge">tn·m</span></div>
                 </div></div>
             </div>
           </div>
