@@ -737,14 +737,14 @@ export class FootingCanvasRenderer {
     ctx.beginPath(); ctx.moveTo(xB1, yBot); ctx.lineTo(xB1, yBot - hookPx); ctx.stroke();
     ctx.restore();
 
-    // --- Acero longitudinal superior (str.top): línea roja punteada, capa superior ---
+    // --- Acero longitudinal superior (str.top): línea roja, ganchos 90° hacia abajo en ambos extremos ---
     const yTop = t.toY(yTopMain);
     ctx.save();
     ctx.strokeStyle = '#dc2626';
     ctx.lineWidth = 2;
-    ctx.setLineDash([7, 4]);
     ctx.beginPath(); ctx.moveTo(xB0, yTop); ctx.lineTo(xB1, yTop); ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(xB0, yTop); ctx.lineTo(xB0, yTop + hookPx); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xB1, yTop); ctx.lineTo(xB1, yTop + hookPx); ctx.stroke();
     ctx.restore();
 
     // --- Acero transversal (str.trans1/trans2): distribución real —
@@ -803,7 +803,7 @@ export class FootingCanvasRenderer {
     ctx.fillStyle = '#2563eb';
     ctx.fillText(`Línea azul: Ø ${dbMain.inches} inferior @ ${str.bottom.spacing} cm (gancho 90° = ${(hook * 100).toFixed(0)} cm)`, 10, 18);
     ctx.fillStyle = '#dc2626';
-    ctx.fillText(`Línea roja punteada: Ø ${dbMain.inches} superior @ ${str.top.spacing} cm`, 10, 34);
+    ctx.fillText(`Línea roja: Ø ${dbMain.inches} superior @ ${str.top.spacing} cm (gancho 90° = ${(hook * 100).toFixed(0)} cm)`, 10, 34);
     ctx.fillStyle = '#f97316';
     ctx.fillText(`Círculos naranjas: Ø ${dbTrans.inches} transversal @ ${str.trans1.spacing} / ${str.trans2.spacing} cm`, 10, 50);
     ctx.fillStyle = '#16a34a';
