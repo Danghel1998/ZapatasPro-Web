@@ -747,7 +747,12 @@ export class FootingCanvasRenderer {
     ctx.setLineDash([]);
     ctx.restore();
 
-    // --- Acero transversal bajo cada columna (str.trans1/trans2): grupo de círculos naranjas ---
+    // --- Acero transversal bajo cada columna (str.trans1/trans2): grupo de
+    // círculos naranjas — recortado al recubrimiento real de la losa
+    // (nunca más allá de [cover+rTrans, L−cover−rTrans]), para columnas al
+    // ras o casi al ras del borde (medianera) donde el ancho de grupo fijo
+    // "±max(colL/2, 0.15)" se saldría del concreto. ---
+    const xTransMin = cover + rTrans, xTransMax = L - cover - rTrans;
     const drawTransGroup = (xc, colL) => {
       const half = Math.max(colL / 2, 0.15);
       const n = 5;
@@ -756,8 +761,9 @@ export class FootingCanvasRenderer {
       ctx.strokeStyle = '#9a3412';
       for (let i = 0; i < n; i++) {
         const dx = -half + (2 * half * i) / (n - 1);
+        const xPos = Math.min(xTransMax, Math.max(xTransMin, xc + dx));
         ctx.beginPath();
-        ctx.arc(t.toX(xc + dx), t.toY(yBottomTrans), Math.max(2.2, rTrans * t.scale), 0, Math.PI * 2);
+        ctx.arc(t.toX(xPos), t.toY(yBottomTrans), Math.max(2.2, rTrans * t.scale), 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
       }
       ctx.restore();
