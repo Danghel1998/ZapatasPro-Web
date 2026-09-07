@@ -1314,6 +1314,28 @@ export class AppUIController {
     </div>`;
   }
 
+  /** Fracción "a/b" en línea, con barra horizontal — para mostrar fórmulas
+   * de ingeniería con la misma notación matemática de la hoja de cálculo
+   * de referencia, en vez de "a/b" en texto corrido. */
+  _frac(num, den) {
+    return `<span style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:1.15;margin:0 2px;font-size:0.95em;">
+      <span style="border-bottom:1.3px solid currentColor;padding:0 3px;white-space:nowrap;">${num}</span>
+      <span style="padding:0 3px;white-space:nowrap;">${den}</span>
+    </span>`;
+  }
+
+  /** Recuadro de "fórmulas" (referencia, no depende de los datos del
+   * proyecto) para un paso de III) DISEÑO — se muestra una sola vez,
+   * arriba de las tarjetas de resultado, para no repetir la fórmula en
+   * cada fila de la tabla de resultados (que solo lleva la etiqueta y el
+   * número, p.ej. "Vc1 =" seguido del valor). */
+  _formulaBox(lines) {
+    return `<div class="border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 mb-2">
+      <div class="text-[9.5px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Fórmulas</div>
+      <div class="text-[13px] text-slate-700 leading-loose space-y-0.5">${lines.map((l) => `<div>${l}</div>`).join('')}</div>
+    </div>`;
+  }
+
   _disenoIsoladaHtml(d, str) {
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1) Combinaciones de diseño</h4>
@@ -1336,31 +1358,42 @@ export class AppUIController {
       </div>`;
 
     const pn = str.punching;
+    const punchFormulas = this._formulaBox([
+      `β = ${this._frac('Lado mayor columna', 'Lado menor columna')}`,
+      `A₀ = (b+d)(t+d)`,
+      `b₀ = (b+d)·2 + (t+d)·2`,
+      `Vu = σu·(A_zapata − A₀)`,
+      `Vc₁ = 0.53(1 + ${this._frac('2', 'β')})√f'c·b₀·d`,
+      `Vc₂ = 0.27(${this._frac('αs·d', 'b₀')} + 2)√f'c·b₀·d`,
+      `Vc₃ = 1.06√f'c·b₀·d`,
+    ]);
     const step2Html = `
       <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2) Diseño por punzonamiento (corte en dos direcciones)</h4>
       <p class="text-[11px] text-slate-500 mb-2">Verifica que el concreto resista el corte que la columna "punzona" a través del peralte de la zapata, en un perímetro crítico ubicado a d/2 de sus caras. La resistencia φVc es el menor de tres expresiones (E.060 / ACI 318 22.6.5), según la relación de lados de la columna (βc) y su ubicación (interior/borde/esquina, factor αs).</p>
       <div class="flex flex-col md:flex-row gap-4 items-start">
         <div class="w-full md:flex-1">
+          ${punchFormulas}
           <div class="grid grid-cols-2 gap-2 mb-2">
             ${this._statCard('Vu (cortante actuante)', `${knToKg(pn.Vu).toFixed(0)} kg`, null, null)}
             ${this._statCard('φVc (resistencia)', `${knToKg(pn.phiVc).toFixed(0)} kg`, null, null)}
           </div>
           <table class="text-xs w-full">
-            ${this._specRow('Peralte efectivo (d)', `${pn.d_avg.toFixed(2)} m`)}
-            ${this._specRow('Área dentro del perímetro (Ao)', `${pn.areaWithinPerimeter.toFixed(2)} m²`)}
-            ${this._specRow('Perímetro crítico (bo)', `${pn.bo.toFixed(2)} m`)}
-            ${this._specRow('Relación de lados de columna (βc)', pn.betaC.toFixed(2))}
-            ${this._specRow('Tipo de columna (αs)', `${d.col_type} (αs = ${{ interior: 40, medianera: 30, esquinera: 20 }[d.col_type] ?? 40})`)}
-            ${this._specRow('Vc1 = 0.53(1+2/βc)√f\'c·bo·d', `${knToKg(pn.Vc1).toFixed(0)} kg`)}
-            ${this._specRow('Vc2 = 0.27(αs·d/bo+2)√f\'c·bo·d', `${knToKg(pn.Vc2).toFixed(0)} kg`)}
-            ${this._specRow('Vc3 = 1.06√f\'c·bo·d', `${knToKg(pn.Vc3).toFixed(0)} kg`)}
-            ${this._specRow('Vc = mín(Vc1,Vc2,Vc3)', `${knToKg(pn.Vc).toFixed(0)} kg`)}
+            ${this._specRow('d', `${pn.d_avg.toFixed(2)} m`)}
+            ${this._specRow('Ao', `${pn.areaWithinPerimeter.toFixed(2)} m²`)}
+            ${this._specRow('bo', `${pn.bo.toFixed(2)} m`)}
+            ${this._specRow('β', pn.betaC.toFixed(2))}
+            ${this._specRow('Tipo de columna', `${d.col_type} (αs = ${{ interior: 40, medianera: 30, esquinera: 20 }[d.col_type] ?? 40})`)}
+            ${this._specRow('Vc1', `${knToKg(pn.Vc1).toFixed(0)} kg`)}
+            ${this._specRow('Vc2', `${knToKg(pn.Vc2).toFixed(0)} kg`)}
+            ${this._specRow('Vc3', `${knToKg(pn.Vc3).toFixed(0)} kg`)}
+            ${this._specRow('Vc (mín. de las 3)', `${knToKg(pn.Vc).toFixed(0)} kg`)}
           </table>
         </div>
         <div class="flex justify-center w-full md:w-auto">${this._punchingSketchSvg()}</div>
       </div>
       <p class="text-xs font-semibold mt-2">Verificación Vu ≤ φVc: ${this._estadoCell(pn.pass)}</p>`;
 
+    const shearFormulas = this._formulaBox([`Vu = σu·(volado − d)`, `φVc = 0.85(0.53)√f'c·b·d`]);
     const shearDir = (label, res) => `
       <h5 class="text-[11px] font-bold text-slate-600 mt-3 mb-1">Dirección ${label} — voladizo ${res.strip.side}, Lc = ${res.strip.Lc.toFixed(2)} m</h5>
       <div class="grid grid-cols-2 gap-2 mb-1">
@@ -1372,10 +1405,15 @@ export class AppUIController {
       <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3) Diseño por cortante (una dirección)</h4>
       <p class="text-[11px] text-slate-500 mb-2">Verifica el corte tipo "viga ancha" en la sección crítica, ubicada a una distancia "d" de la cara de la columna, en cada dirección de la franja en voladizo (E.060 / ACI 318 22.5).</p>
       <div class="flex flex-col md:flex-row gap-4 items-start">
-        <div class="w-full md:flex-1">${shearDir('L', str.L_dir)}${shearDir('B', str.B_dir)}</div>
+        <div class="w-full md:flex-1">${shearFormulas}${shearDir('L', str.L_dir)}${shearDir('B', str.B_dir)}</div>
         <div class="flex justify-center w-full md:w-auto">${this._shearSketchSvg()}</div>
       </div>`;
 
+    const flexFormulas = this._formulaBox([
+      `Mu = σu·${this._frac('volado²', '2')}`,
+      `a = d − √(d² − ${this._frac('2Mu', "φ·0.85·f'c·b")})`,
+      `As = ${this._frac('Mu', `φ·fy·(d − a/2)`)}`,
+    ]);
     const flexDir = (label, res) => `
       <h5 class="text-[11px] font-bold text-slate-600 mt-2 mb-1">Dirección ${label}</h5>
       <div class="grid grid-cols-2 gap-2 mb-1">
@@ -1383,14 +1421,15 @@ export class AppUIController {
         ${this._statCard('As requerido', `${res.flex.As_design.toFixed(2)} cm²`, `${res.As_per_m.toFixed(2)} cm²/m`, null)}
       </div>
       <table class="text-xs w-full">
-        ${this._specRow('Brazo de palanca (a)', `${res.flex.a_cm.toFixed(2)} cm`)}
+        ${this._specRow('a', `${res.flex.a_cm.toFixed(2)} cm`)}
         ${this._specRow('As calculado', `${res.flex.As_calc.toFixed(2)} cm²`)}
-        ${this._specRow('As mínimo (losa, 0.0018·b·h)', `${res.flex.As_min.toFixed(2)} cm²`)}
+        ${this._specRow('As mínimo (losa)', `${res.flex.As_min.toFixed(2)} cm²`)}
       </table>`;
     const longDir = str.isLLong ? 'L' : 'B', longRes = str.isLLong ? str.L_dir : str.B_dir;
     const step4Html = `
       <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">4) Diseño por flexión</h4>
-      <p class="text-[11px] text-slate-500 mb-2">El momento último Mu = σu·volado²/2 se toma en la cara de la columna, en cada dirección; el acero se calcula con el bloque de Whitney, tomando el mayor entre el cálculo y el acero mínimo de losa por retracción y temperatura (0.0018·b·h). El lado corto se reparte en banda central + franjas exteriores (ACI 318 15.4.4); el lado largo va uniforme.</p>
+      <p class="text-[11px] text-slate-500 mb-2">El momento último Mu se toma en la cara de la columna, en cada dirección; el acero se calcula con el bloque de Whitney, tomando el mayor entre el cálculo y el acero mínimo de losa por retracción y temperatura (Asmín = 0.0018·b·h). El lado corto se reparte en banda central + franjas exteriores (ACI 318 15.4.4); el lado largo va uniforme.</p>
+      ${flexFormulas}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
         <div>${flexDir('L', str.L_dir)}</div>
         <div>${flexDir('B', str.B_dir)}</div>
