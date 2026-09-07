@@ -894,11 +894,11 @@ export class AppUIController {
     </div>`;
   }
 
-  /** Isométrico 3D embebido justo debajo del cajetín, al inicio de la
-   * Memoria de Cálculo — se crea el visor 3D bajo demanda si el usuario
-   * nunca abrió esa pestaña en esta sesión (mismo criterio que usa
-   * "Generar Plano" para que el isométrico siempre esté disponible en el
-   * informe, no solo cuando ya se visitó "Detalle 3D"). */
+  /** Isométrico 3D embebido al final de la Memoria de Cálculo — se crea
+   * el visor 3D bajo demanda si el usuario nunca abrió esa pestaña en
+   * esta sesión (mismo criterio que usa "Generar Plano" para que el
+   * isométrico siempre esté disponible en el informe, no solo cuando
+   * ya se visitó "Detalle 3D"). */
   _isometricoImgHtml() {
     let img = '';
     try {
@@ -911,7 +911,7 @@ export class AppUIController {
         this.renderer3D.updateData(this.data, this.bearingResults, this.structResults);
         img = this.renderer3D.captureSnapshot();
       }
-    } catch (e) { /* no disponible */ }
+    } catch (e) { console.warn('Isométrico 3D no disponible en Memoria de Cálculo:', e); }
     if (!img) return '';
     return `<div class="border border-slate-200 rounded-lg overflow-hidden bg-white mb-6">
       <div class="bg-slate-100 text-[10px] font-bold text-slate-600 uppercase tracking-wide px-2 py-1 border-b border-slate-200">Isométrico 3D</div>

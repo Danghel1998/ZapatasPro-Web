@@ -158,7 +158,7 @@ export class FootingRenderer3D {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     let dataUrl = '';
-    try { dataUrl = this.renderer.domElement.toDataURL('image/png'); } catch (e) { /* WebGL no disponible aún */ }
+    try { dataUrl = this.renderer.domElement.toDataURL('image/png'); } catch (e) { console.warn('captureSnapshot: toDataURL falló', e); }
     this._forceLight = false;
     this._applyBackground();
     if (this.footingData && this.structResults) this.updateData(this.footingData, null, this.structResults);
