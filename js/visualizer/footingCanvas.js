@@ -660,7 +660,10 @@ export class FootingCanvasRenderer {
     const { connected } = this.footingData;
     const { L1, B1, L2, B2, col1_L, col1_B, col2_L, col2_B, s, strap_width } = connected;
     const c1 = col1_L / 2.0; // eje de columna 1 (límite de propiedad en x=0)
-    const c2 = c1 + s;
+    // "s" es la distancia LIBRE entre caras de columna (no entre ejes) —
+    // ver connectedFooting.js; la distancia entre ejes de columna le suma
+    // medio ancho de cada columna.
+    const c2 = c1 + s + col1_L / 2.0 + col2_L / 2.0;
     const f2x0 = c2 - L2 / 2.0;
     const maxB = Math.max(B1, B2);
     const ctx = this.ctx;
@@ -706,7 +709,7 @@ export class FootingCanvasRenderer {
         ctx.restore();
 
         this._dimLine(ctx, t.toX(0), t.toY(-B1 / 2), t.toX(L1), t.toY(-B1 / 2), `L1 = ${L1.toFixed(2)} m`, 16);
-        this._dimLine(ctx, t.toX(c1), t.toY(maxB / 2) + 22, t.toX(c2), t.toY(maxB / 2) + 22, `s = ${s.toFixed(2)} m`);
+        this._dimLine(ctx, t.toX(col1_L), t.toY(maxB / 2) + 22, t.toX(c2 - col2_L / 2), t.toY(maxB / 2) + 22, `s = ${s.toFixed(2)} m`);
         this._dimLine(ctx, t.toX(f2x0), t.toY(-B2 / 2), t.toX(f2x0 + L2), t.toY(-B2 / 2), `L2 = ${L2.toFixed(2)} m`, 16);
       } else {
         const str = this.structResults;
@@ -728,7 +731,7 @@ export class FootingCanvasRenderer {
   drawConnectedElevation(width, height, c1, c2, f2x0) {
     const ctx = this.ctx;
     const { connected } = this.footingData;
-    const { L1, h1, L2, h2, col1_L, col2_L, s, strap_height, Df } = connected;
+    const { L1, h1, L2, h2, col1_L, col2_L, strap_height, Df } = connected;
     const stemH = 0.8;
     const maxH = Math.max(h1, h2);
     const t = this._worldTransform(width, height, { xMin: -0.5, xMax: f2x0 + L2 + 0.5, yMin: -0.6, yMax: maxH + stemH + 0.8 });
@@ -775,7 +778,7 @@ export class FootingCanvasRenderer {
     ctx.setLineDash([]);
     ctx.restore();
 
-    this._dimLine(ctx, t.toX(0), t.toY(0), t.toX(f2x0 + L2), t.toY(0), `s = ${s.toFixed(2)} m (ejes de columna)`, 26);
+    this._dimLine(ctx, t.toX(c1), t.toY(0), t.toX(c2), t.toY(0), `${(c2 - c1).toFixed(2)} m (ejes de columna)`, 26);
   }
 
   /** Acero longitudinal (superior/inferior) y estribos de la viga de

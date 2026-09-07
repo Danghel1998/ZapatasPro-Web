@@ -7,7 +7,7 @@
  */
 
 import { tnToKn, knToTn, kgcm2ToKpa, kpaToKgcm2, kgm3ToKnm3 } from './units.js';
-import { evaluateEnvelope } from './seismicEnvelope.js';
+import { evaluateEnvelope, simplifyConnectedRect } from './seismicEnvelope.js';
 
 /**
  * Verificación geotécnica de una zapata AISLADA (rectángulo L × B). Cuando
@@ -191,54 +191,120 @@ export function calculateCombinedBearing(footingData) {
  * al centro de su propia zapata (no puede crecer hacia el límite). R es la
  * fuerza cortante que transmite la viga de conexión.
  */
-export function calculateConnectedBearing(footingData) {
-  const { connected, foundation, materials } = footingData;
-  const { L1, B1, h1, L2, B2, h2, col1_L, s, Df } = connected;
+/**
+ * Redistribuye las cargas de gravedad (+ sismo longitudinal, si se pasa)
+ * de ambas columnas hacia las reacciones de zapata R1/R2, por el método
+ * de la viga rígida (hoja de cálculo de referencia Efrén, "ZAPATA
+ * CONECTADA.xlsx"): R2 = P2 − P1·e1/denom + (My1+My2)/denom, R1 = P1+P2−R2.
+ * "My" es el momento de cada columna en el plano de la viga de conexión
+ * (misma dirección que la excentricidad e1).
+ */
+export function redistributeRigidBeam(P1, P2, My1, My2, e1, denom) {
+  const R2 = P2 - (P1 * e1) / denom + (My1 + My2) / denom;
+  const R1 = P1 + P2 - R2;
+  return { R1, R2 };
+}
 
-  const gamma_s = kgm3ToKnm3(foundation.gamma_kgm3);
-  const gamma_c = kgm3ToKnm3(materials.gamma_c_kgm3);
+export function calculateConnectedBearing(footingData) {
+  const { connected, foundation } = footingData;
+  const { L1, B1, L2, B2, col1_L, col2_L } = connected;
+
   const q_adm = kgcm2ToKpa(foundation.q_adm_kgcm2);
+  const fz = connected.fz ?? 0.1;
 
   const P1 = tnToKn(connected.P1d + connected.P1l);
   const P2 = tnToKn(connected.P2d + connected.P2l);
-  const M1 = tnToKn(connected.M1_d + connected.M1_l);
-  const M2 = tnToKn(connected.M2_d + connected.M2_l);
+  const Mx1 = tnToKn((connected.Mx1_d || 0) + (connected.Mx1_l || 0));
+  const My1 = tnToKn((connected.My1_d || 0) + (connected.My1_l || 0));
+  const Mx2 = tnToKn((connected.Mx2_d || 0) + (connected.Mx2_l || 0));
+  const My2 = tnToKn((connected.My2_d || 0) + (connected.My2_l || 0));
 
-  // Método de la viga rígida, generalizado con el momento neto de cada
-  // columna (además de la excentricidad geométrica e1 de la Zapata 1):
-  // tomando momentos respecto al centroide de la Zapata 1 (mismo criterio
-  // que la memoria de referencia UNI, "sentido horario positivo" — un
-  // momento positivo aumenta la reacción de la Zapata 2).
+  // Excentricidad geométrica de la Zapata 1 (columna al ras del límite de
+  // propiedad) y distancia entre centroides de zapata (a partir de la
+  // distancia LIBRE entre caras de columna "s" — ver predimensionConnected).
   const e1 = L1 / 2.0 - col1_L / 2.0;
-  const N2 = P2 - (P1 * e1) / (s - e1) + (M1 + M2) / (s - e1);
-  const N1 = P1 + P2 - N2;
-  const R = N1 - P1;
+  const sCentroid = connected.s + col1_L / 2.0 + col2_L / 2.0;
+  const denom = sCentroid - e1;
 
+  const { R1, R2 } = redistributeRigidBeam(P1, P2, My1, My2, e1, denom);
   const A1 = L1 * B1, A2 = L2 * B2;
-  const W1 = gamma_c * A1 * h1 + gamma_s * A1 * Math.max(0, Df - h1);
-  const W2 = gamma_c * A2 * h2 + gamma_s * A2 * Math.max(0, Df - h2);
 
-  const N1_total = N1 + W1;
-  const N2_total = N2 + W2;
-  const q1 = N1_total / A1;
-  const q2 = N2_total / A2;
+  // Presión de contacto con el peso propio aproximado por "fz" (igual que
+  // la zapata aislada: N = R·(1+fz)) en vez del peso real de zapata+relleno.
+  const q1 = (R1 * (1 + fz)) / A1;
+  const q2 = (R2 * (1 + fz)) / A2;
 
-  const pass_bearing_1 = q1 <= q_adm;
-  const pass_bearing_2 = q2 <= q_adm;
-  const pass_positive_reaction = N2 > 0; // si N2 <= 0, el método de viga rígida no es aplicable (redimensionar)
+  const hasSeismic = Math.abs(connected.Psx1 || 0) > 1e-9 || Math.abs(connected.Psy1 || 0) > 1e-9
+    || Math.abs(connected.Psx2 || 0) > 1e-9 || Math.abs(connected.Psy2 || 0) > 1e-9
+    || Math.abs(connected.Mx1_sx || 0) > 1e-9 || Math.abs(connected.My1_sx || 0) > 1e-9
+    || Math.abs(connected.Mx1_sy || 0) > 1e-9 || Math.abs(connected.My1_sy || 0) > 1e-9
+    || Math.abs(connected.Mx2_sx || 0) > 1e-9 || Math.abs(connected.My2_sx || 0) > 1e-9
+    || Math.abs(connected.Mx2_sy || 0) > 1e-9 || Math.abs(connected.My2_sy || 0) > 1e-9;
+
+  const q_adm_seismic = q_adm * (connected.seismic_bearing_factor || 1.25);
+  const q_adm_eff = hasSeismic ? q_adm_seismic : q_adm;
+  const pass_bearing_1 = q1 <= q_adm_eff;
+  const pass_bearing_2 = q2 <= q_adm_eff;
+  const pass_positive_reaction = R2 > 0; // si R2 <= 0, el método de viga rígida no es aplicable (redimensionar)
+
+  // -------------------------------------------------------------------
+  // ENVOLVENTE SÍSMICA DE SERVICIO — solo si hay datos de sismo. El sismo
+  // longitudinal (SXD) redistribuye su P y su My completos a través del
+  // mismo mecanismo de viga rígida; el sismo transversal (SYD) se suma
+  // DIRECTAMENTE a R1/R2 de gravedad (no pasa por la viga) — misma
+  // distinción física que la hoja de referencia. El momento "Mx" propio de
+  // cada columna (transversal, no redistribuido) se usa en la verificación
+  // local biaxial de cada zapata con My=0 (el efecto longitudinal ya está
+  // absorbido en R) — ver cornerPressures: se pasa Mx como si fuera "My"
+  // del formato genérico para que caiga en el término 6·Mx/(L·B²), igual
+  // que la hoja de referencia (Mx pareado con L·B², no con B·L²).
+  // -------------------------------------------------------------------
+  let seismic_envelope1 = null, seismic_envelope2 = null;
+  if (hasSeismic) {
+    const Psx1 = tnToKn(connected.Psx1 || 0), Mx1_sx = tnToKn(connected.Mx1_sx || 0), My1_sx = tnToKn(connected.My1_sx || 0);
+    const Psy1 = tnToKn(connected.Psy1 || 0), Mx1_sy = tnToKn(connected.Mx1_sy || 0), My1_sy = tnToKn(connected.My1_sy || 0);
+    const Psx2 = tnToKn(connected.Psx2 || 0), Mx2_sx = tnToKn(connected.Mx2_sx || 0), My2_sx = tnToKn(connected.My2_sx || 0);
+    const Psy2 = tnToKn(connected.Psy2 || 0), Mx2_sy = tnToKn(connected.Mx2_sy || 0), My2_sy = tnToKn(connected.My2_sy || 0);
+
+    const sxdPlus = redistributeRigidBeam(P1 + Psx1, P2 + Psx2, My1 + My1_sx, My2 + My2_sx, e1, denom);
+    const sxdMinus = redistributeRigidBeam(P1 - Psx1, P2 - Psx2, My1 - My1_sx, My2 - My2_sx, e1, denom);
+
+    const cases = [
+      { label: 'CM+CV', R1, R2, Mx1: Mx1, Mx2: Mx2, limit: q_adm_seismic },
+      { label: 'CM+CV+SXD', R1: sxdPlus.R1, R2: sxdPlus.R2, Mx1: Mx1 + Mx1_sx, Mx2: Mx2 + Mx2_sx, limit: q_adm_seismic },
+      { label: 'CM+CV−SXD', R1: sxdMinus.R1, R2: sxdMinus.R2, Mx1: Mx1 - Mx1_sx, Mx2: Mx2 - Mx2_sx, limit: q_adm_seismic },
+      { label: 'CM+CV+SYD', R1: R1 + Psy1, R2: R2 + Psy2, Mx1: Mx1 + Mx1_sy, Mx2: Mx2 + Mx2_sy, limit: q_adm_seismic },
+      { label: 'CM+CV−SYD', R1: R1 - Psy1, R2: R2 - Psy2, Mx1: Mx1 - Mx1_sy, Mx2: Mx2 - Mx2_sy, limit: q_adm_seismic },
+    ];
+    const env1 = simplifyConnectedRect(evaluateEnvelope(cases.map((c) => ({ label: c.label, Pgrav: c.R1, Pseis: 0, Mx: 0, My: c.Mx1, fz, limit: c.limit })), L1, B1));
+    const env2 = simplifyConnectedRect(evaluateEnvelope(cases.map((c) => ({ label: c.label, Pgrav: c.R2, Pseis: 0, Mx: 0, My: c.Mx2, fz, limit: c.limit })), L2, B2));
+    const wrap = (env) => ({
+      rows: env.rows.map((r) => ({ ...r, q_governing_kgcm2: kpaToKgcm2(r.q_governing), limit_kgcm2: kpaToKgcm2(r.limit) })),
+      uses_rectangular: env.uses_rectangular,
+      governing_q: env.governing_q,
+      governing_q_kgcm2: kpaToKgcm2(env.governing_q),
+      governingRow: env.governingRow,
+      pass: env.rows.every((r) => r.pass),
+    });
+    seismic_envelope1 = wrap(env1);
+    seismic_envelope2 = wrap(env2);
+  }
+
+  const pass_bearing_final_1 = hasSeismic ? seismic_envelope1.pass : pass_bearing_1;
+  const pass_bearing_final_2 = hasSeismic ? seismic_envelope2.pass : pass_bearing_2;
 
   return {
-    L1, B1, h1, L2, B2, h2, A1, A2, Df,
+    L1, B1, L2, B2, A1, A2,
     P1_tn: connected.P1d + connected.P1l, P2_tn: connected.P2d + connected.P2l,
-    M1_tn: connected.M1_d + connected.M1_l, M2_tn: connected.M2_d + connected.M2_l,
-    e1, s,
-    N1, N1_tn: knToTn(N1), R, R_tn: knToTn(R), N2, N2_tn: knToTn(N2),
-    W1_tn: knToTn(W1), W2_tn: knToTn(W2),
-    N1_total, N2_total,
+    Mx1_tn: (connected.Mx1_d || 0) + (connected.Mx1_l || 0), My1_tn: (connected.My1_d || 0) + (connected.My1_l || 0),
+    Mx2_tn: (connected.Mx2_d || 0) + (connected.Mx2_l || 0), My2_tn: (connected.My2_d || 0) + (connected.My2_l || 0),
+    e1, s: connected.s, sCentroid, denom, fz,
+    R1, R1_tn: knToTn(R1), R2, R2_tn: knToTn(R2), Ru: R1 - P1, Ru_tn: knToTn(R1 - P1),
     q1, q2,
     q1_kgcm2: kpaToKgcm2(q1), q2_kgcm2: kpaToKgcm2(q2),
-    q_adm, q_adm_kgcm2: foundation.q_adm_kgcm2,
-    pass_bearing_1, pass_bearing_2, pass_positive_reaction,
-    pass_all: pass_bearing_1 && pass_bearing_2 && pass_positive_reaction,
+    q_adm, q_adm_kgcm2: foundation.q_adm_kgcm2, q_adm_eff_kgcm2: kpaToKgcm2(q_adm_eff),
+    hasSeismic, seismic_envelope1, seismic_envelope2,
+    pass_bearing_1: pass_bearing_final_1, pass_bearing_2: pass_bearing_final_2, pass_positive_reaction,
+    pass_all: pass_bearing_final_1 && pass_bearing_final_2 && pass_positive_reaction,
   };
 }

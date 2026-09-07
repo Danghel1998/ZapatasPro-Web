@@ -85,23 +85,43 @@ export const DEFAULT_FOOTING_DATA = {
   // conexión transfiere una fuerza a la Zapata 2 (interior, diseñada
   // concéntrica bajo su columna) para que la Zapata 1 trabaje con presión
   // uniforme sin necesitar invadir el terreno vecino.
+  //
+  // Valores por defecto = caso de verificación de la hoja de cálculo real
+  // de referencia (Efrén, "ZAPATA CONECTADA.xlsx"), columna 1 medianera
+  // 0.40×0.60, columna 2 interior 0.25×1.90.
   connected: {
-    L1: 1.60, B1: 2.20, h1: 0.50, // Zapata 1 (excéntrica, en el límite)
-    col1_L: 0.40, col1_B: 0.40,
-    L2: 2.20, B2: 2.20, h2: 0.50, // Zapata 2 (interior, concéntrica)
-    col2_L: 0.40, col2_B: 0.40,
-    s: 4.50,          // separación entre ejes de columna 1 y columna 2
-    strap_width: 0.30, strap_height: 0.60, // viga de conexión
-    Df: 1.50,
-    P1d: 25.0, P1l: 10.0, // columna 1 (excéntrica): carga de servicio
-    P2d: 45.0, P2l: 20.0, // columna 2 (interior)
-    // Momento neto de cada columna (tn·m), en torno al eje transversal a la
-    // línea de columnas — signo positivo: tiende a aumentar la reacción de
-    // la Zapata 2 (equivalente al "sentido horario positivo" de la
-    // memoria de referencia UNI). Entran directamente a la ecuación de
-    // equilibrio que resuelve N1/N2 junto con la excentricidad e1.
-    M1_d: 0.0, M1_l: 0.0,
-    M2_d: 0.0, M2_l: 0.0,
+    L1: 2.40, B1: 2.45, h1: 0.60, // Zapata 1 (excéntrica, en el límite)
+    col1_L: 0.40, col1_B: 0.60,
+    L2: 3.15, B2: 4.80, h2: 0.60, // Zapata 2 (interior, concéntrica)
+    col2_L: 0.25, col2_B: 1.90,
+    // Distancia LIBRE entre caras de columnas (no entre ejes) — la
+    // hoja de referencia mide así en planta; la distancia entre
+    // centroides (usada en el método de la viga rígida) se deriva como
+    // s + col1_L/2 + col2_L/2.
+    s: 4.70,
+    strap_width: 0.40, strap_height: 0.70, // viga de conexión
+    Df: 2.50,
+    // Cargas de servicio por columna (tn / tn·m) — mismo esquema que la
+    // zapata aislada: Mx produce excentricidad en la dirección L, My en
+    // la dirección B. El sismo se ingresa como un caso de servicio propio
+    // (SXD/SYD), sin descomponer en muerta/viva.
+    P1d: 17.036, P1l: 2.587,
+    Mx1_d: 0.1055, Mx1_l: 0.0247, My1_d: 0.0842, My1_l: 0.0942,
+    Psx1: 22.0158, Mx1_sx: 0.0, My1_sx: 3.6171,
+    Psy1: 7.6676, Mx1_sy: 0.0746, My1_sy: 0.0,
+    P2d: 51.328, P2l: 18.4259,
+    Mx2_d: 14.9828, Mx2_l: 8.5279, My2_d: 0.2957, My2_l: 0.2156,
+    Psx2: 4.3938, Mx2_sx: 0.0, My2_sx: 3.8709,
+    Psy2: 14.098, Mx2_sy: 169.1277, My2_sy: 0.0,
+    // Incremento admisible en la capacidad portante para combinaciones
+    // que incluyen sismo (E.030) — 1.25, misma convención que la zapata
+    // aislada.
+    seismic_bearing_factor: 1.25,
+    // Factor de peso propio estimado ("k"/"fz" de la hoja de referencia):
+    // sustituye el cálculo del peso propio real — la carga axial de
+    // gravedad se infla por (1+fz) en el predimensionamiento y en la
+    // envolvente de presiones de contacto de cada zapata.
+    fz: 0.1,
   },
 
   foundation: {
@@ -186,12 +206,12 @@ export const PRESET_PROJECTS = {
     })()
   },
   zapata_conectada_tipica: {
-    title: 'Zapata Conectada — Columna de Límite de Propiedad + Viga de Conexión',
-    desc: 'Columna 1 en el límite de propiedad (zapata excéntrica) conectada mediante viga de conexión a la Zapata 2 (interior, concéntrica bajo su columna).',
+    title: 'Zapata Conectada — Caso de Verificación (Efrén)',
+    desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por viga de conexión — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA CONECTADA.xlsx".',
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'conectada';
-      d.foundation.q_adm_kgcm2 = 2.0;
+      d.foundation.q_adm_kgcm2 = 0.8;
       return d;
     })()
   }

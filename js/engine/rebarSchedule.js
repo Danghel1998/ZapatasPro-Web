@@ -104,12 +104,17 @@ export function calculateConnectedRebarSchedule(footingData, structResults) {
   const strap = str.strap;
   const hookStirrup = hookStirrup_m(strap.rebarTrans.diameter_mm, strap.rebarTrans.diameter_m);
   const stirrupPerimeter = 2 * (strap.width - 2 * cover) + 2 * (strap.height - 2 * cover) + 2 * hookStirrup;
-  const strapClearSpan = Math.max(0.3, connected.s - connected.col1_L / 2.0 - connected.col2_L / 2.0);
+  // "connected.s" es la distancia LIBRE entre caras de columna (no entre
+  // ejes) — ver connectedFooting.js. La luz libre de la viga es esa misma
+  // distancia; la longitud entre centroides (para el corte de barras) le
+  // suma medio ancho de cada columna.
+  const strapClearSpan = Math.max(0.3, connected.s);
+  const sCentroid = connected.s + connected.col1_L / 2.0 + connected.col2_L / 2.0;
 
   rows.push(row(nextMark(), 'Viga de conexión — Acero superior (momento máximo en Zapata 1)', str.dbMain, 'straight',
-    connected.s + 0.6, strap.n_bars_top));
+    sCentroid + 0.6, strap.n_bars_top));
   rows.push(row(nextMark(), 'Viga de conexión — Acero inferior (mínimo constructivo)', str.dbMain, 'straight',
-    connected.s + 0.6, strap.n_bars_bottom));
+    sCentroid + 0.6, strap.n_bars_bottom));
   rows.push(row(nextMark(), `Viga de conexión — Estribos ${strap.stirrups_required_by_calc ? '(por cálculo)' : '(mínimos constructivos)'}`, strap.rebarTrans, 'stirrup',
     stirrupPerimeter, strapClearSpan / (strap.stirrup_spacing_cm / 100) + 1));
 

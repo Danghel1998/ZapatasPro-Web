@@ -426,47 +426,48 @@ export class AppUIController {
   }
 
   /**
-   * Predimensionamiento de zapata conectada: dimensiona ambas zapatas a la
-   * vez, iterando el método de la viga rígida (mismo cálculo de N1/N2 que
-   * calculateConnectedBearing). Primera pasada con P1/P2 solos (sin la
-   * interacción de la viga) para tener un L1 inicial con el que calcular
-   * e1; luego, en cada vuelta, se recalculan N1/N2 con el e1 vigente y se
-   * redimensiona cada zapata con su reacción real, hasta converger.
+   * Predimensionamiento de zapata conectada — hoja de cálculo de
+   * referencia (Efrén, "ZAPATA CONECTADA.xlsx"): en un solo paso (sin
+   * iterar, el factor "fz" ya aproxima el peso propio):
+   *   1. Zapata 1 (excéntrica): A1 = P1(1+fz)/q_adm, repartida con
+   *      _solveEdgeLB (volado "c" hacia un solo lado en L — al ras del
+   *      límite de propiedad —, simétrico en B).
+   *   2. e1 = L1/2 − col1_L/2; distancia entre centroides = s (libre entre
+   *      caras) + col1_L/2 + col2_L/2.
+   *   3. R2 = P2 − P1·e1/(centroides−e1) + (My1+My2)/(centroides−e1) —
+   *      método de la viga rígida, con el momento "My" de cada columna
+   *      (el que actúa en el plano de la viga de conexión).
+   *   4. Zapata 2 (interior): A2 = R2(1+fz)/q_adm, repartida con
+   *      _solveCenteredLB (volado "c" simétrico en ambas direcciones).
    */
   predimensionConnected() {
-    const { connected, foundation, materials } = this.data;
+    const { connected, foundation } = this.data;
     const P1 = (connected.P1d || 0) + (connected.P1l || 0);
     const P2 = (connected.P2d || 0) + (connected.P2l || 0);
-    const M1 = (connected.M1_d || 0) + (connected.M1_l || 0);
-    const M2 = (connected.M2_d || 0) + (connected.M2_l || 0);
-    const s = connected.s;
+    const My1 = (connected.My1_d || 0) + (connected.My1_l || 0);
+    const My2 = (connected.My2_d || 0) + (connected.My2_l || 0);
     if (P1 <= 0 || P2 <= 0) return;
-    const gamma_c_tnm3 = (materials.gamma_c_kgm3 || 2400) / 1000;
-    const gamma_s_tnm3 = (foundation.gamma_kgm3 || 1800) / 1000;
+    const fz = connected.fz ?? 0.1;
+    const qAdmTnm2 = (foundation.q_adm_kgcm2 || 1) * 10;
     const { col1_L, col1_B, col2_L, col2_B } = connected;
-    const h1 = connected.h1 || 0.5, h2 = connected.h2 || 0.5, Df = connected.Df || 1.5;
 
-    let sz1 = this._iterateArea(P1, h1, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveEdgeLB(col1_L, col1_B, A));
-    let sz2 = this._iterateArea(P2, h2, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveCenteredLB(col2_L, col2_B, A));
+    const A1_req = (P1 * (1 + fz)) / qAdmTnm2;
+    const { L: L1, B: B1 } = this._solveEdgeLB(col1_L, col1_B, A1_req);
 
-    for (let outer = 0; outer < 8; outer++) {
-      const e1 = sz1.L / 2 - col1_L / 2;
-      if (s - e1 <= 0.01) break; // geometría inválida (e1 muy cerca de s) — no seguir iterando
-      const N2 = P2 - (P1 * e1) / (s - e1) + (M1 + M2) / (s - e1);
-      const N1 = P1 + P2 - N2;
-      if (N2 <= 0 || N1 <= 0) break; // reacción negativa: el método de viga rígida no aplica, se deja la última geometría válida
-      const newSz1 = this._iterateArea(N1, h1, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveEdgeLB(col1_L, col1_B, A));
-      const newSz2 = this._iterateArea(N2, h2, Df, gamma_c_tnm3, gamma_s_tnm3, (A) => this._solveCenteredLB(col2_L, col2_B, A));
-      const converged = Math.abs(newSz1.L - sz1.L) < 0.01 && Math.abs(newSz1.B - sz1.B) < 0.01
-        && Math.abs(newSz2.L - sz2.L) < 0.01 && Math.abs(newSz2.B - sz2.B) < 0.01;
-      sz1 = newSz1; sz2 = newSz2;
-      if (converged) break;
-    }
+    const e1 = L1 / 2 - col1_L / 2;
+    const sCentroid = connected.s + col1_L / 2 + col2_L / 2;
+    const denom = sCentroid - e1;
+    if (denom <= 0.01) return; // geometría inválida (e1 demasiado cerca de la columna 2)
+    const R2 = P2 - (P1 * e1) / denom + (My1 + My2) / denom;
+    if (R2 <= 0) return; // reacción negativa: el método de la viga rígida no aplica
 
-    connected.L1 = Math.round(sz1.L * 100) / 100;
-    connected.B1 = Math.round(sz1.B * 100) / 100;
-    connected.L2 = Math.round(sz2.L * 100) / 100;
-    connected.B2 = Math.round(sz2.B * 100) / 100;
+    const A2_req = (R2 * (1 + fz)) / qAdmTnm2;
+    const { L: L2, B: B2 } = this._solveCenteredLB(col2_L, col2_B, A2_req);
+
+    connected.L1 = Math.round(L1 * 100) / 100;
+    connected.B1 = Math.round(B1 * 100) / 100;
+    connected.L2 = Math.round(L2 * 100) / 100;
+    connected.B2 = Math.round(B2 * 100) / 100;
     this.syncFormWithData();
     this.recalculateAndRender();
   }
@@ -639,9 +640,9 @@ export class AppUIController {
       this.renderKPIBadge('kpi_bearing', {
         title: 'Presión de Contacto (Z1 / Z2)',
         val: `${this._p(geo.q1_kgcm2).replace(/ [^ ]+$/, '')} / ${this._p(geo.q2_kgcm2)}`,
-        req: `≤ ${this._p(geo.q_adm_kgcm2)}`,
+        req: `≤ ${this._p(geo.q_adm_eff_kgcm2)}`,
         pass: geo.pass_bearing_1 && geo.pass_bearing_2,
-        progress: Math.max(geo.q1_kgcm2, geo.q2_kgcm2) / geo.q_adm_kgcm2 * 100,
+        progress: Math.max(geo.q1_kgcm2, geo.q2_kgcm2) / geo.q_adm_eff_kgcm2 * 100,
       });
     } else if (geo.hasSeismic) {
       this.renderKPIBadge('kpi_bearing', {
@@ -663,8 +664,8 @@ export class AppUIController {
 
     if (type === 'conectada') {
       this.renderKPIBadge('kpi_eccentricity', {
-        title: 'Fuerza en Viga de Conexión (R)',
-        val: `${knToKg(geo.R).toFixed(0)} kg`,
+        title: 'Fuerza en Viga de Conexión (Ru)',
+        val: `${knToKg(geo.Ru).toFixed(0)} kg`,
         req: `e1 = ${(geo.e1 * 100).toFixed(1)} cm`,
         pass: geo.pass_positive_reaction,
         progress: 50,
@@ -782,11 +783,11 @@ export class AppUIController {
         + `
         <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
           <td class="py-2 px-3 font-bold text-slate-800">Viga de conexión (flexión)</td>
-          <td class="py-2 px-3 text-right">${strap.Mu_kgm.toFixed(0)} kg·m</td>
+          <td class="py-2 px-3 text-right">${strap.Mu_top_kgm.toFixed(0)} kg·m</td>
           <td class="py-2 px-3 text-right">—</td>
-          <td class="py-2 px-3 text-right font-bold text-indigo-600">${strap.flex.As_design.toFixed(2)} cm²</td>
+          <td class="py-2 px-3 text-right font-bold text-indigo-600">${strap.As_top_req.toFixed(2)} cm²</td>
           <td class="py-2 px-3 font-semibold text-slate-900">${strap.n_bars_top} ${str.dbMain.name} (superior)</td>
-          <td class="py-2 px-3 text-center">${badge(true)}</td>
+          <td class="py-2 px-3 text-center">${badge(strap.pass_ductility_top)}</td>
         </tr>
         <tr class="border-b border-slate-100 hover:bg-slate-50 text-xs">
           <td class="py-2 px-3 font-bold text-slate-800">Viga de conexión (corte)</td>
@@ -1412,6 +1413,209 @@ export class AppUIController {
     return html;
   }
 
+  /** Caja "I) DATOS DE DISEÑO" de la zapata conectada — mismo formato que
+   * _datosDisenoIsoladaHtml, con las secciones de columna y las tablas de
+   * cargas duplicadas para cada columna. */
+  _datosDisenoConectadaHtml(d, fnd, mat, hasSeismic) {
+    const specsHtml = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Especificaciones del proyecto</h4>
+      <table class="text-xs w-full mb-3">
+        ${this._specRow(`Resistencia del concreto (f'c)`, `${mat.fc_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('Resistencia del acero (fy)', `${mat.fy_kgcm2.toFixed(0)} kg/cm²`)}
+        ${this._specRow('Prof. de desplante (Df)', `${d.Df.toFixed(2)} m`)}
+        ${this._specRow('Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2))}
+        ${this._specRow('Peso específico del suelo (γs)', `${fnd.gamma_kgm3.toFixed(0)} kg/m³`)}
+      </table>
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Sección de Columna 1 (medianera)</h4>
+      <table class="text-xs w-full mb-3">
+        ${this._specRow('Ancho de columna (b1)', `${d.col1_L.toFixed(2)} m`)}
+        ${this._specRow('Peralte de columna (t1)', `${d.col1_B.toFixed(2)} m`)}
+      </table>
+      <h4 class="text-xs font-bold text-slate-700 mb-1">Sección de Columna 2 (interior)</h4>
+      <table class="text-xs w-full">
+        ${this._specRow('Ancho de columna (b2)', `${d.col2_L.toFixed(2)} m`)}
+        ${this._specRow('Peralte de columna (t2)', `${d.col2_B.toFixed(2)} m`)}
+      </table>`;
+
+    const loadsBlock = (label, Pd, Pl, Mxd, Mxl, Myd, Myl, Psx, Mxsx, Mysx, Psy, Mxsy, Mysy) => {
+      const row = (l, P, Mx, My) => `<tr class="odd:bg-sky-50">
+        <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${l}</td>
+        <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(P)}</td>
+        <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(Mx)}</td>
+        <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(My)}</td>
+      </tr>`;
+      return `
+        <h4 class="text-xs font-bold text-slate-700 mb-1">Cargas en servicio — ${label}</h4>
+        <table class="text-xs w-full border-collapse mb-3">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100"></th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">P (Ton)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Mx (Ton-m)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">My (Ton-m)</th>
+          </tr></thead>
+          <tbody>
+            ${row('CM', Pd, Mxd, Myd)}
+            ${row('CV', Pl, Mxl, Myl)}
+            ${hasSeismic ? row('SXD', Psx, Mxsx, Mysx) : ''}
+            ${hasSeismic ? row('SYD', Psy, Mxsy, Mysy) : ''}
+          </tbody>
+        </table>`;
+    };
+    const loadsHtml = loadsBlock('Columna 1', d.P1d, d.P1l, d.Mx1_d, d.Mx1_l, d.My1_d, d.My1_l, d.Psx1, d.Mx1_sx, d.My1_sx, d.Psy1, d.Mx1_sy, d.My1_sy)
+      + loadsBlock('Columna 2', d.P2d, d.P2l, d.Mx2_d, d.Mx2_l, d.My2_d, d.My2_l, d.Psx2, d.Mx2_sx, d.My2_sx, d.Psy2, d.Mx2_sy, d.My2_sy)
+      + `<p class="text-[10px] text-slate-500 mt-1 leading-snug">
+        <span class="font-semibold">CM</span>: Carga Muerta ·
+        <span class="font-semibold">CV</span>: Carga Viva
+        ${hasSeismic ? ` · <span class="font-semibold">SXD</span>: Sismo en dirección X · <span class="font-semibold">SYD</span>: Sismo en dirección Y` : ''} ·
+        <span class="font-semibold">P</span>: carga axial ·
+        <span class="font-semibold">Mx, My</span>: momentos flectores en X e Y
+      </p>`;
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">I) DATOS DE DISEÑO</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-3">
+        <div>${specsHtml}</div>
+        <div>${loadsHtml}</div>
+      </div>
+    </div>`;
+  }
+
+  /**
+   * Caja "II) PREDIMENSIONAMIENTO" de la zapata conectada — hoja de
+   * cálculo de referencia (Efrén, "ZAPATA CONECTADA.xlsx"): 1°) Zapata 1
+   * (excéntrica) por cargas de gravedad; 2°) reacciones R1/R2 por el
+   * método de la viga rígida; 3°) Zapata 2 (interior) a partir de R2; 4°)
+   * verificación de la presión de contacto de servicio de cada zapata
+   * (envolvente con sismo, si el proyecto tiene datos de sismo).
+   */
+  _predimensionamientoConectadaHtml(d, fnd, mat, geo) {
+    const fz = d.fz ?? 0.1;
+    const qAdmTnm2 = (fnd.q_adm_kgcm2 || 1) * 10;
+    const P1 = (d.P1d || 0) + (d.P1l || 0);
+    const P2 = (d.P2d || 0) + (d.P2l || 0);
+    const My1 = (d.My1_d || 0) + (d.My1_l || 0);
+    const My2 = (d.My2_d || 0) + (d.My2_l || 0);
+
+    // 1°) Zapata 1 — volado "c" hacia el interior en L (al ras del límite
+    // de propiedad), simétrico en B — igual que una zapata aislada
+    // medianera (_solveEdgeLB: L=c+a, B=2c+b).
+    const A1_req = (P1 * (1 + fz)) / qAdmTnm2;
+    const disc1 = (2 * d.col1_L + d.col1_B) * (2 * d.col1_L + d.col1_B) - 8 * (d.col1_L * d.col1_B - A1_req);
+    const c1Raw = (-(2 * d.col1_L + d.col1_B) + Math.sqrt(disc1)) / 4;
+    const c1Round = Math.max(0.05, Math.ceil(c1Raw / 0.05) * 0.05);
+    const L1p = c1Round + d.col1_L, B1p = 2 * c1Round + d.col1_B;
+
+    const step1Html = `
+      <h4 class="text-xs font-bold text-slate-700 mb-1">1°) Zapata 1 (excéntrica) — cargas de gravedad</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Área tentativa: A1 = P1(1+fz) / q_adm, con fz = ${fz.toFixed(2)}. Volado "c" hacia el interior en L (L1 = c + b1), simétrico en B (B1 = 2c + t1) — la cara exterior de la columna 1 queda al ras del límite de propiedad.</p>
+      <table class="text-xs w-full mb-2">
+        ${this._specRow('Carga en servicio (P1 = CM+CV)', `${this._trimNum(P1)} Ton`)}
+        ${this._specRow('Área tentativa (A1)', `${A1_req.toFixed(2)} m²`)}
+        ${this._specRow('Volado calculado (c)', `${c1Raw.toFixed(2)} m`)}
+        ${this._specRow('Volado redondeado (c)', `${c1Round.toFixed(2)} m`)}
+      </table>
+      <div class="flex justify-center mb-2">${this._predimSketchSvg(L1p, B1p, d.col1_L, d.col1_B, c1Round, 'medianera')}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 1 predimensionada: L1 = ${L1p.toFixed(2)} m &nbsp; B1 = ${B1p.toFixed(2)} m</p>`;
+
+    // 2°) R1, R2 — método de la viga rígida, con la geometría YA VIGENTE
+    // (d.L1, no la tentativa L1p) para mostrar el estado actual real.
+    const e1 = d.L1 / 2 - d.col1_L / 2;
+    const sCentroid = d.s + d.col1_L / 2 + d.col2_L / 2;
+    const denom = sCentroid - e1;
+    const R2 = P2 - (P1 * e1) / denom + (My1 + My2) / denom;
+    const R1 = P1 + P2 - R2;
+    const step2Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">2°) Reacciones R1, R2 — método de la viga rígida</h4>
+      <p class="text-[11px] text-slate-500 mb-2">e1 = L1/2 − col1_L/2 (excentricidad de la columna 1 respecto al centroide de su zapata). Distancia entre centroides = distancia libre entre caras de columna (s) + col1_L/2 + col2_L/2. R2 = P2 − P1·e1/(centroides−e1) + (My1+My2)/(centroides−e1); R1 = P1+P2−R2.</p>
+      <table class="text-xs w-full">
+        ${this._specRow('Excentricidad Zapata 1 (e1)', `${e1.toFixed(2)} m`)}
+        ${this._specRow('Distancia entre centroides', `${sCentroid.toFixed(2)} m`)}
+        ${this._specRow('Reacción Zapata 1 (R1)', `${this._trimNum(R1)} Ton`)}
+        ${this._specRow('Reacción Zapata 2 (R2)', `${this._trimNum(R2)} Ton`)}
+      </table>`;
+
+    // 3°) Zapata 2 — volado "c" simétrico en ambas direcciones, a partir
+    // de R2 (no de P2 solo) — igual que una zapata aislada interior
+    // (_solveCenteredLB: L=2c+a, B=2c+b).
+    const A2_req = (R2 * (1 + fz)) / qAdmTnm2;
+    const disc2 = (d.col2_L - d.col2_B) * (d.col2_L - d.col2_B) + 4 * A2_req;
+    const c2Raw = (-(d.col2_L + d.col2_B) + Math.sqrt(disc2)) / 4;
+    const c2Round = Math.max(0.05, Math.ceil(c2Raw / 0.05) * 0.05);
+    const L2p = 2 * c2Round + d.col2_L, B2p = 2 * c2Round + d.col2_B;
+
+    const step3Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">3°) Zapata 2 (interior) — a partir de R2</h4>
+      <p class="text-[11px] text-slate-500 mb-2">Área tentativa: A2 = R2(1+fz) / q_adm. Volado "c" repartido por igual en ambas direcciones (L2 = 2c + b2, B2 = 2c + t2).</p>
+      <table class="text-xs w-full mb-2">
+        ${this._specRow('Área tentativa (A2)', `${A2_req.toFixed(2)} m²`)}
+        ${this._specRow('Volado calculado (c)', `${c2Raw.toFixed(2)} m`)}
+        ${this._specRow('Volado redondeado (c)', `${c2Round.toFixed(2)} m`)}
+      </table>
+      <div class="flex justify-center mb-2">${this._predimSketchSvg(L2p, B2p, d.col2_L, d.col2_B, c2Round, 'interior')}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 2 predimensionada: L2 = ${L2p.toFixed(2)} m &nbsp; B2 = ${B2p.toFixed(2)} m</p>`;
+
+    // 4°) Verificación de la presión de contacto de servicio, con la
+    // geometría VIGENTE (d.L1/B1/L2/B2) — reutiliza geo (calculateConnectedBearing).
+    let step4Html = `
+      <h4 class="text-xs font-bold text-slate-700 mt-4 mb-1">4°) Verificación geotécnica (cargas de servicio, geometría vigente)</h4>
+      <table class="text-xs w-full border-collapse mb-2">
+        <thead><tr>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Verificación</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Resultado</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Límite</th>
+          <th class="border border-slate-300 px-2 py-1 bg-sky-100">Estado</th>
+        </tr></thead>
+        <tbody>
+          <tr class="odd:bg-sky-50">
+            <td class="border border-slate-300 px-2 py-1 font-semibold">Presión de contacto Zapata 1 (q1)</td>
+            <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._p(geo.q1_kgcm2)}</td>
+            <td class="border border-slate-300 px-2 py-1 text-right">≤ ${this._p(geo.q_adm_eff_kgcm2)}</td>
+            <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(geo.pass_bearing_1)}</td>
+          </tr>
+          <tr class="odd:bg-sky-50">
+            <td class="border border-slate-300 px-2 py-1 font-semibold">Presión de contacto Zapata 2 (q2)</td>
+            <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._p(geo.q2_kgcm2)}</td>
+            <td class="border border-slate-300 px-2 py-1 text-right">≤ ${this._p(geo.q_adm_eff_kgcm2)}</td>
+            <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(geo.pass_bearing_2)}</td>
+          </tr>
+          <tr class="odd:bg-sky-50">
+            <td class="border border-slate-300 px-2 py-1 font-semibold">Reacción R2 positiva (método aplicable)</td>
+            <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._trimNum(geo.R2_tn)} Ton</td>
+            <td class="border border-slate-300 px-2 py-1 text-right">&gt; 0</td>
+            <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(geo.pass_positive_reaction)}</td>
+          </tr>
+        </tbody>
+      </table>`;
+
+    if (geo.hasSeismic) {
+      const envTable = (title, env) => `
+        <h5 class="text-[11px] font-bold text-slate-600 mt-2 mb-1">${title}</h5>
+        <table class="text-xs w-full border-collapse mb-2">
+          <thead><tr>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">q (esquina más desfavorable)</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Límite admisible</th>
+            <th class="border border-slate-300 px-2 py-1 bg-sky-100">Estado</th>
+          </tr></thead>
+          <tbody>
+            ${env.rows.map((r) => `<tr class="odd:bg-sky-50">
+              <td class="border border-slate-300 px-2 py-1 font-bold bg-sky-100">${r.label}</td>
+              <td class="border border-slate-300 px-2 py-1 text-right font-mono">${this._p(r.q_governing_kgcm2)}${r.minC < 0 ? ' (rectangular)' : ''}</td>
+              <td class="border border-slate-300 px-2 py-1 text-right">≤ ${this._p(r.limit_kgcm2)}</td>
+              <td class="border border-slate-300 px-2 py-1 text-center">${this._estadoCell(r.pass)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+      step4Html += `<p class="text-[11px] text-slate-500 mb-1">Al haber datos de sismo, se evalúa además la envolvente CM+CV, CM+CV±SXD, CM+CV±SYD en cada zapata (σ con el momento propio "Mx" de cada columna — el efecto longitudinal ya está absorbido en R1/R2), limitada a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm.</p>`
+        + envTable('Zapata 1', geo.seismic_envelope1) + envTable('Zapata 2', geo.seismic_envelope2);
+    }
+
+    return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
+      <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">II) PREDIMENSIONAMIENTO</div>
+      <div class="p-3">${step1Html}${step2Html}${step3Html}${step4Html}</div>
+    </div>`;
+  }
+
   _reportConnected() {
     const d = this.data.connected, fnd = this.data.foundation, mat = this.data.materials;
     const geo = this.bearingResults, str = this.structResults;
@@ -1420,30 +1624,17 @@ export class AppUIController {
     html += this._cajetinBlockHtml();
     html += this._visualizerImagesHtml();
 
-    html += this._sectionTitle('1. Datos de Entrada');
-    html += this._table(['Parámetro', 'Valor'], [
-      ['Zapata 1, en el límite de propiedad (L1 × B1)', `${d.L1.toFixed(2)} × ${d.B1.toFixed(2)} m`],
-      ['Columna 1 (col1_L × col1_B)', `${d.col1_L.toFixed(2)} × ${d.col1_B.toFixed(2)} m`],
-      ['Zapata 2, interior — concéntrica (L2 × B2)', `${d.L2.toFixed(2)} × ${d.B2.toFixed(2)} m`],
-      ['Columna 2 (col2_L × col2_B)', `${d.col2_L.toFixed(2)} × ${d.col2_B.toFixed(2)} m`],
-      ['Separación entre ejes de columna (s)', `${d.s.toFixed(2)} m`],
-      ['Viga de conexión (ancho × peralte)', `${d.strap_width.toFixed(2)} × ${d.strap_height.toFixed(2)} m`],
-      ['Carga de servicio Columna 1 (D/L)', `${d.P1d.toFixed(1)} / ${d.P1l.toFixed(1)} tn`],
-      ['Carga de servicio Columna 2 (D/L)', `${d.P2d.toFixed(1)} / ${d.P2l.toFixed(1)} tn`],
-      ['Momento neto Columna 1 (D/L)', `${d.M1_d.toFixed(1)} / ${d.M1_l.toFixed(1)} tn·m`],
-      ['Momento neto Columna 2 (D/L)', `${d.M2_d.toFixed(1)} / ${d.M2_l.toFixed(1)} tn·m`],
-      ['Capacidad portante admisible (q_adm)', this._p(fnd.q_adm_kgcm2)],
-      [`f'c / fy`, `${mat.fc_kgcm2.toFixed(0)} / ${mat.fy_kgcm2.toFixed(0)} kg/cm²`],
-    ]);
+    html += this._datosDisenoConectadaHtml(d, fnd, mat, geo.hasSeismic);
+    html += this._predimensionamientoConectadaHtml(d, fnd, mat, geo);
 
-    html += this._sectionTitle('2. Verificación Geotécnica (Cargas de Servicio) — Método de la Viga Rígida');
-    const hasM = Math.abs(geo.M1_tn) > 0.001 || Math.abs(geo.M2_tn) > 0.001;
-    html += `<p class="text-xs text-slate-600 mb-2">La columna 1 no puede centrarse en su zapata (límite de propiedad): excentricidad e1 = L1/2 − col1_L/2 = ${(geo.e1 * 100).toFixed(2)} cm. Para que la Zapata 1 trabaje con presión <b>uniforme</b>, la viga de conexión transmite una fuerza R = ${geo.R_tn.toFixed(2)} tn hacia la Zapata 2. Tomando momentos respecto al centroide de la Zapata 1 (ΣFy=0, ΣM=0)${hasM ? `, incluyendo el momento neto de cada columna (M1=${geo.M1_tn.toFixed(2)}, M2=${geo.M2_tn.toFixed(2)} tn·m)` : ''}: N2 = P2 − P1·e1/(s−e1) + (M1+M2)/(s−e1) = ${geo.N2_tn.toFixed(2)} tn, N1 = P1+P2−N2 = ${geo.N1_tn.toFixed(2)} tn.</p>`;
-    html += this._table(['Verificación', 'Resultado', 'Límite', 'Estado'], [
-      ['Reacción N2 positiva (método aplicable)', `${geo.N2_tn.toFixed(2)} tn`, '> 0', this._badgeHtml(geo.pass_positive_reaction)],
-      ['Presión de contacto Zapata 1 (q1)', this._p(geo.q1_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.pass_bearing_1)],
-      ['Presión de contacto Zapata 2 (q2)', this._p(geo.q2_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_kgcm2)}`, this._badgeHtml(geo.pass_bearing_2)],
-    ]);
+    html += this._sectionTitle('2. Combinaciones de Diseño (Cargas Factoradas)');
+    html += `<p class="text-xs text-slate-600 mb-2">Combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV, 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total) — redistribuidas a R1/R2 por el método de la viga rígida en cada combinación (mismo criterio de la sección II, 2°). La más desfavorable de cada zapata se toma como su presión de diseño "su", uniforme sobre toda su área.</p>`;
+    const envRow = (r) => [r.label, `${this._p(kpaToKgcm2(r.q_governing))}${r.minC < 0 ? ' (rectangular)' : ''}`];
+    html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+      <div><h4 class="text-xs font-bold text-slate-700 mb-1">Zapata 1</h4>${this._table(['Combinación', 'σ (esquina más desfavorable)'], str.env1.rows.map(envRow))}</div>
+      <div><h4 class="text-xs font-bold text-slate-700 mb-1">Zapata 2</h4>${this._table(['Combinación', 'σ (esquina más desfavorable)'], str.env2.rows.map(envRow))}</div>
+    </div>`;
+    html += `<p class="text-xs text-slate-600 mb-3">Zapata 1 — combinación gobernante: <b>${str.env1.governingRow.label}</b>, su1 = ${this._p(kpaToKgcm2(str.env1.su_kPa), 3)}. Zapata 2 — combinación gobernante: <b>${str.env2.governingRow.label}</b>, su2 = ${this._p(kpaToKgcm2(str.env2.su_kPa), 3)}.</p>`;
 
     html += this._sectionTitle('3. Zapata 1 (Excéntrica) — Diseño Estructural');
     html += this._slabReportHtml(str.slab1, d.L1, d.B1, 3);
@@ -1453,13 +1644,16 @@ export class AppUIController {
 
     html += this._sectionTitle('5. Viga de Conexión ("Strap Beam")');
     const strap = str.strap;
-    html += `<p class="text-xs text-slate-600 mb-2">Cortante constante Ru = ${strap.Vu_kg.toFixed(0)} kg a lo largo de toda la viga; momento lineal, máximo junto a la Zapata 1 (Mu = Ru·s) y nulo junto a la Zapata 2 (concéntrica, sin momento que equilibrar).</p>`;
+    html += `<p class="text-xs text-slate-600 mb-2">Modelo de dos cargas puntuales (P1, P2 en las columnas) y dos reacciones puntuales (R1, R2 en los centroides de cada zapata) — no una viga con carga distribuida. Solo las combinaciones con sismo longitudinal (SXD) o ninguna generan cortante/momento en la viga; el sismo transversal (SYD) no la afecta (se resuelve directamente en cada zapata).</p>`;
     html += this._table(['', 'Valor'], [
-      ['Momento último máximo (junto a Zapata 1)', `${strap.Mu_kgm.toFixed(0)} kg·m`],
-      ['Cuantía de diseño ρ', strap.flex.rho_design.toFixed(4)],
-      ['Acero superior requerido', `${strap.flex.As_design.toFixed(2)} cm² → ${strap.n_bars_top} ${str.dbMain.name} (As col. = ${strap.As_top_provided.toFixed(2)} cm²)`],
-      ['Acero inferior (mínimo constructivo)', `${strap.n_bars_bottom} ${str.dbMain.name} (As col. = ${strap.As_bottom_provided.toFixed(2)} cm²)`],
-      ['Cortante último Vu', `${strap.Vu_kg.toFixed(0)} kg`],
+      ['Cortante último Vu (envolvente)', `${strap.Vu_kg.toFixed(0)} kg`],
+      ['Momento último superior |Mu| (envolvente)', `${strap.Mu_top_kgm.toFixed(0)} kg·m`],
+      ['Acero superior requerido', `${strap.As_top_req.toFixed(2)} cm² → ${strap.n_bars_top} ${str.dbMain.name} (As col. = ${strap.As_top_provided.toFixed(2)} cm²)`],
+      ['Ductilidad superior (As ≤ As_máx = 0.75·ρ_bal·b·d)', `${strap.As_max_beam.toFixed(2)} cm² — ${this._badgeHtml(strap.pass_ductility_top)}`],
+      ['Momento último inferior Mu (envolvente)', `${strap.Mu_bottom_kgm.toFixed(0)} kg·m`],
+      ['Acero inferior requerido', `${strap.As_bottom_req.toFixed(2)} cm² → ${strap.n_bars_bottom} ${str.dbMain.name} (As col. = ${strap.As_bottom_provided.toFixed(2)} cm²)`],
+      ['Ductilidad inferior (As ≤ As_máx)', `${strap.As_max_beam.toFixed(2)} cm² — ${this._badgeHtml(strap.pass_ductility_bottom)}`],
+      ['Acero mínimo de viga (0.7√f\'c/fy·b·d)', `${strap.As_min_beam.toFixed(2)} cm²`],
       ['φVc (solo concreto)', `${knToKg(strap.phiVc).toFixed(0)} kg`],
       ['¿Requiere estribos por cálculo?', strap.stirrups_required_by_calc ? 'Sí (Vu > φVc)' : 'No (mínimos constructivos)'],
       ['Estribos', `${strap.rebarTrans.name}, 2 ramas @ ${strap.stirrup_spacing_cm} cm`],

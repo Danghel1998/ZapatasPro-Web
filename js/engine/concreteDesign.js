@@ -8,6 +8,29 @@
 export const PHI_FLEX = 0.90;
 export const PHI_SHEAR = 0.85; // E.060 9.3.2 (corte y punzonamiento)
 
+/**
+ * Acero mínimo de VIGA (no losa) en unidades kg/cm² directas — E.060
+ * 10.5 / ACI 318 9.6.1.2, expresión equivalente 0.7√f'c/fy (misma
+ * convención de la hoja de cálculo de referencia Efrén para la viga de
+ * conexión). fc, fy en kg/cm²; b, d en cm; resultado en cm².
+ */
+export function beamAsMin_cm2(fc_kgcm2, fy_kgcm2, b_cm, d_cm) {
+  return (0.7 * Math.sqrt(fc_kgcm2) / fy_kgcm2) * b_cm * d_cm;
+}
+
+/**
+ * Acero máximo de VIGA por ductilidad (E.060 10.3.3 / ACI 318,
+ * As_max = 0.75·ρ_balanceada·b·d) — mismo criterio y mismo β1=0.85 fijo
+ * (válido para f'c ≤ 280 kg/cm², caso usual en vigas de conexión) de la
+ * hoja de cálculo de referencia. fc, fy en kg/cm²; b, d en cm; resultado
+ * en cm².
+ */
+export function beamAsMax_cm2(fc_kgcm2, fy_kgcm2, b_cm, d_cm) {
+  const beta1 = 0.85;
+  const rho_bal = 0.85 * beta1 * (fc_kgcm2 / fy_kgcm2) * (6300 / (6300 + fy_kgcm2));
+  return 0.75 * rho_bal * b_cm * d_cm;
+}
+
 /** Gancho estándar a 90° de una barra principal (E.060 / ACI 318 25.3.1):
  * extensión de 12·db más allá del doblez, para todo diámetro. Usado tanto
  * para el metrado (cuadro de habilitación) como para dibujar el doblez en

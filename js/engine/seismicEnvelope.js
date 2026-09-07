@@ -42,9 +42,14 @@ export function cornerPressures(N, Mx, My, L, B) {
  * rectangular equivalente en cada dirección — con la excentricidad
  * (Mx/Praw, My/Praw) calculada sobre la carga SIN inflar Praw =
  * Pgrav+Pseis, igual que la hoja de referencia. La presión gobernante
- * final: si ALGUNA esquina de CUALQUIER caso es negativa, se gobierna por
- * el máximo de las presiones rectangulares ya calculadas; si no, por el
- * máximo de todas las esquinas de todos los casos.
+ * final: la fila (combinación) con el mayor q_governing PROPIO — cada
+ * fila ya decide correctamente, de forma independiente, si usa su propio
+ * máximo trapezoidal o su propio equivalente rectangular; una fila con
+ * alguna esquina en tracción NUNCA debe opacar a otra fila, sin tracción,
+ * cuyo propio q_governing sea más alto (bug real detectado al aplicar
+ * esto a zapata conectada: una combinación con esquina en tracción podía
+ * "ganar" con un valor rectangular pequeño o incluso negativo, ocultando
+ * a la combinación realmente más desfavorable).
  */
 export function evaluateEnvelope(cases, L, B) {
   const rows = cases.map((c) => {
@@ -69,17 +74,35 @@ export function evaluateEnvelope(cases, L, B) {
     return { ...c, N, Praw, corners, minC, maxC, rect, q_governing, pass };
   });
 
-  const globalMin = Math.min(...rows.map((r) => r.minC));
-  let governing_q;
-  if (globalMin < 0) {
-    const rectVals = rows.filter((r) => r.rect).flatMap((r) => [r.rect.qx, r.rect.qy]);
-    governing_q = rectVals.length ? Math.max(...rectVals) : Math.max(...rows.map((r) => r.maxC));
-  } else {
-    governing_q = Math.max(...rows.flatMap((r) => Object.values(r.corners)));
-  }
-
   let governingRow = rows[0];
   rows.forEach((r) => { if (r.q_governing > governingRow.q_governing) governingRow = r; });
+  const governing_q = governingRow.q_governing;
 
-  return { rows, globalMin, uses_rectangular: globalMin < 0, governing_q, governingRow };
+  return { rows, uses_rectangular: governingRow.rect !== null, governing_q, governingRow };
+}
+
+/**
+ * Ajusta el resultado de evaluateEnvelope() para el chequeo LOCAL de cada
+ * zapata de una zapata conectada — hoja de cálculo de referencia (Efrén,
+ * "ZAPATA CONECTADA.xlsx"): ahí "My" siempre vale 0 (el efecto
+ * longitudinal ya está absorbido en R1/R2, ver calculateConnectedBearing/
+ * calculateConnectedStructural), y el respaldo rectangular de esa hoja
+ * solo implementa la fórmula que depende de "My" — al ser siempre 0, se
+ * reduce al promedio simple N/A (sin corrección real por la excentricidad
+ * de "Mx" que causó la tracción). Esta función reproduce exactamente ese
+ * comportamiento: cuando una fila cae en el respaldo rectangular, su
+ * q_governing se reemplaza por el promedio de las 4 esquinas (= N/A) en
+ * vez del máximo entre qx y qy que usa evaluateEnvelope() para la zapata
+ * aislada (que sí tiene My≠0 en general y sí necesita ambas fórmulas).
+ */
+export function simplifyConnectedRect(env) {
+  const rows = env.rows.map((r) => {
+    if (!r.rect) return r;
+    const q_governing = (r.corners.c + r.corners.d + r.corners.b + r.corners.e) / 4;
+    const pass = r.limit !== undefined ? q_governing <= r.limit : null;
+    return { ...r, q_governing, pass };
+  });
+  let governingRow = rows[0];
+  rows.forEach((r) => { if (r.q_governing > governingRow.q_governing) governingRow = r; });
+  return { rows, uses_rectangular: governingRow.rect !== null, governing_q: governingRow.q_governing, governingRow };
 }
