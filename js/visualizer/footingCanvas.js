@@ -481,6 +481,47 @@ export class FootingCanvasRenderer {
     ctx.fillStyle = '#dc2626';
     ctx.fillText(`Círculos rojos: Ø ${dbMain.inches} a lo largo de B @ ${dotSpacingLabel}`, 10, 34);
     ctx.restore();
+
+    // --- Flechas de llamada (leader lines): apuntan directo a cada acero
+    // dibujado, con su diámetro y espaciamiento — además de la leyenda de
+    // arriba, para que la vista en corte se lea sola sin cruzar con la
+    // leyenda al recortarla (p.ej. al embeberla en la Memoria de Cálculo).
+    const leader = (fromXpx, fromYpx, toXpx, toYpx, text, color, align) => {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(fromXpx, fromYpx); ctx.lineTo(toXpx, toYpx); ctx.stroke();
+      const ang = Math.atan2(toYpx - fromYpx, toXpx - fromXpx);
+      const ah = 5;
+      ctx.beginPath();
+      ctx.moveTo(toXpx, toYpx);
+      ctx.lineTo(toXpx - ah * Math.cos(ang - Math.PI / 6), toYpx - ah * Math.sin(ang - Math.PI / 6));
+      ctx.lineTo(toXpx - ah * Math.cos(ang + Math.PI / 6), toYpx - ah * Math.sin(ang + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = 'bold 10px Inter, sans-serif';
+      ctx.textAlign = align;
+      text.split('\n').forEach((line, i) => ctx.fillText(line, fromXpx + (align === 'end' ? -4 : 4), fromYpx + i * 12));
+      ctx.restore();
+    };
+
+    // Flecha 1: barra a lo largo de L (línea azul) — apunta cerca del gancho.
+    const lineTargetX = t.toX(runHalf * 0.55);
+    leader(x1 + 10, yLine - 28, lineTargetX, yLine, `Ø ${dbMain.inches} @ ${lineSpacingLabel}\n(long. L, gancho 90°)`, '#2563eb', 'start');
+
+    // Flecha 2: barra a lo largo de B (círculo rojo) — apunta al círculo más cercano al borde.
+    if (dotPositions.length) {
+      const farDot = dotPositions.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), dotPositions[0]);
+      leader(t.toX(-runHalf * 0.65), yDot - 26, t.toX(farDot), yDot, `Ø ${dbMain.inches} @ ${dotSpacingLabel}\n(long. B)`, '#dc2626', 'end');
+    }
+
+    // Flecha 3: espera/arranque de columna (barra verde).
+    if (col_L && stemH) {
+      const dowelX = ex + (col_L / 2 - cover);
+      const dowelYmid = t.toY((h + stemH - cover + Math.max(lineDepth, dotDepth)) / 2);
+      leader(t.toX(ex + col_L / 2 + 0.12) , dowelYmid - 20, t.toX(dowelX), dowelYmid, `Ø ${dbMain.inches}\n(espera/arranque)`, '#16a34a', 'start');
+    }
   }
 
   drawIsolatedPressures(width, height) {

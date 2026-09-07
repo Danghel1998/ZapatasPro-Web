@@ -916,6 +916,20 @@ export class AppUIController {
     return `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">${panels.join('')}</div>`;
   }
 
+  /** Vista en Sección (corte), con las flechas de llamada del acero ya
+   * dibujadas en el propio canvas (_drawSectionRebarIsolated) — embebida
+   * al final del paso "4) Diseño por flexión" de la zapata aislada, justo
+   * debajo del acero elegido. */
+  _seccionArmadoImgHtml() {
+    let img = '';
+    try { img = this.renderer.captureSnapshot('section'); } catch (e) { /* no disponible */ }
+    if (!img) return '';
+    return `<div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <div class="bg-slate-100 text-[10px] font-bold text-slate-600 uppercase tracking-wide px-2 py-1 border-b border-slate-200">Vista en Corte — Acero Colocado</div>
+      <img src="${img}" alt="Vista en corte" class="w-full block">
+    </div>`;
+  }
+
   /** Fila "etiqueta = valor" para los mini-cuadros de especificaciones. */
   _specRow(label, val) {
     return `<tr><td class="py-0.5 pr-3 text-slate-600">${label} =</td><td class="py-0.5 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">${val}</td></tr>`;
@@ -1382,11 +1396,12 @@ export class AppUIController {
         <div>${flexDir('B', str.B_dir)}</div>
       </div>
       <h5 class="text-xs font-bold text-slate-700 mt-3 mb-1.5">🔩 Acero a colocar</h5>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
         ${this._statCard(`Dirección ${longDir} (uniforme)`, `${str.dbMain.name}`, `@ ${longRes.spacing} cm — ${(str.isLLong ? str.L_dir : str.B_dir).As_per_m.toFixed(2)} cm²/m`, true)}
         ${this._statCard('Banda central (lado corto)', `${str.dbMain.name}`, `@ ${str.banding.sp_band} cm — ${str.banding.As_band_per_m.toFixed(2)} cm²/m`, true)}
         ${this._statCard('Franjas exteriores (lado corto)', `${str.dbMain.name}`, str.banding.sp_outer ? `@ ${str.banding.sp_outer} cm — ${str.banding.As_outer_per_m.toFixed(2)} cm²/m` : `@ ${str.banding.sp_band} cm (continúa igual)`, true)}
-      </div>`;
+      </div>
+      ${this._seccionArmadoImgHtml()}`;
 
     return `<div class="border border-slate-300 rounded-lg overflow-hidden mb-6">
       <div class="bg-amber-400 text-slate-900 font-extrabold text-sm px-3 py-1.5">III) DISEÑO</div>
