@@ -1052,16 +1052,19 @@ export class AppUIController {
   }
 
   /**
-   * Boceto en planta del predimensionamiento (zapata Lp×Bp, columna a×b) —
-   * SVG propio, con la misma paleta y convención de cotas del visualizador
-   * (footingCanvas.js, paleta clara), en vez de reproducir literalmente el
-   * dibujo de la hoja de cálculo de referencia. La columna se dibuja
-   * centrada si es interior, al ras del borde derecho si es
-   * medianera/borde, y al ras de los bordes derecho e inferior si es
+   * Boceto en planta de la zapata (Lp×Bp, columna a×b) con la geometría
+   * REALMENTE en uso (la que el usuario tiene puesta en "Geometría", no
+   * una sugerencia recalculada aparte) — SVG propio, con la misma paleta y
+   * convención de cotas del visualizador (footingCanvas.js, paleta clara).
+   * La columna se dibuja centrada si es interior, al ras del borde derecho
+   * si es medianera/borde, y al ras de los bordes derecho e inferior si es
    * esquinera — mismo criterio que deriveColumnEccentricity
-   * (isolatedFooting.js) y _solveLBByColType.
+   * (isolatedFooting.js) y _solveLBByColType. Los volados (izquierdo/
+   * derecho, superior/inferior) se calculan directamente de Lp, Bp, a, b —
+   * por lo tanto siempre reflejan lo que el usuario haya puesto, aunque no
+   * coincida con la fórmula "c" simétrica del predimensionamiento.
    */
-  _predimSketchSvg(Lp, Bp, a, b, cRound, colType) {
+  _predimSketchSvg(Lp, Bp, a, b, colType) {
     const vw = 260, vh = 190;
     const top = 22, right = 30;
     const availW = vw - right - 14, availH = vh - top - 14;
@@ -1076,7 +1079,8 @@ export class AppUIController {
     const fillFooting = '#e7ebf1', strokeFooting = '#334155';
     const fillCol = '#94a3b8', strokeCol = '#1e293b';
     const dim = '#64748b', text = '#334155';
-    const cLabel = `c = ${cRound.toFixed(2)} m`;
+    const cxVal = (cx0 - x0) / scale, cyVal = (cy0 - y0) / scale;
+    const cLabelX = `${cxVal.toFixed(2)} m`, cLabelY = `${cyVal.toFixed(2)} m`;
 
     return `<svg viewBox="0 0 ${vw} ${vh}" width="260" height="190" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
       <rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${fillFooting}" stroke="${strokeFooting}" stroke-width="1.5"/>
@@ -1090,9 +1094,9 @@ export class AppUIController {
       <line x1="${x0 + w + 6}" y1="${y0 + h}" x2="${x0 + w + 14}" y2="${y0 + h}" stroke="${dim}" stroke-width="1"/>
       <text x="0" y="0" font-size="9" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif" transform="translate(${x0 + w + 22} ${y0 + h / 2}) rotate(-90)">B = ${Bp.toFixed(2)} m</text>
       <line x1="${x0}" y1="${cy0 + ch / 2}" x2="${cx0}" y2="${cy0 + ch / 2}" stroke="${dim}" stroke-width="1" stroke-dasharray="2,2"/>
-      <text x="${(x0 + cx0) / 2}" y="${cy0 + ch / 2 - 4}" font-size="8.5" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">${cLabel}</text>
+      <text x="${(x0 + cx0) / 2}" y="${cy0 + ch / 2 - 4}" font-size="8.5" fill="${text}" text-anchor="middle" font-family="Inter, sans-serif">${cLabelX}</text>
       <line x1="${cx0 + cw / 2}" y1="${y0}" x2="${cx0 + cw / 2}" y2="${cy0}" stroke="${dim}" stroke-width="1" stroke-dasharray="2,2"/>
-      <text x="${cx0 + cw / 2 + 4}" y="${(y0 + cy0) / 2 + 3}" font-size="8.5" fill="${text}" font-family="Inter, sans-serif">${cLabel}</text>
+      <text x="${cx0 + cw / 2 + 4}" y="${(y0 + cy0) / 2 + 3}" font-size="8.5" fill="${text}" font-family="Inter, sans-serif">${cLabelY}</text>
     </svg>`;
   }
 
@@ -1188,9 +1192,9 @@ export class AppUIController {
         ${this._specRow('Volado calculado (c)', `${cRaw.toFixed(2)} m`)}
         ${this._specRow('Volado redondeado (c)', `${cRound.toFixed(2)} m`)}
       </table>
-      <div class="flex justify-center mb-2">${this._predimSketchSvg(Lp, Bp, a, b, cRound, colType)}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones sugeridas (a partir de las cargas): L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>
-      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Geometría"): L = ${d.L.toFixed(2)} m &nbsp; B = ${d.B.toFixed(2)} m ${Math.abs(d.L - Lp) > 0.001 || Math.abs(d.B - Bp) > 0.001 ? '— distintas de la sugerencia' : '— igual a la sugerencia'}</p>`;
+      <div class="flex justify-center mb-2">${this._predimSketchSvg(d.L, d.B, a, b, colType)}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones actualmente en uso: L = ${d.L.toFixed(2)} m &nbsp; B = ${d.B.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">(sugerencia mínima a partir de las cargas: L = ${Lp.toFixed(2)} m, B = ${Bp.toFixed(2)} m — edítalas arriba, en "Geometría", si quieres adoptarla)</p>`;
 
     let step2Html = '';
     if (geo.hasSeismic && geo.seismic_envelope) {
@@ -1614,8 +1618,11 @@ export class AppUIController {
     const Lp = Math.ceil(Math.max(2 * x_R, a2 + d.col2_L / 2) / 0.05) * 0.05;
     const A_req = (P1 + P2) * (1 + fz) / qAdmTnm2;
     const Bp = Math.ceil((A_req / Lp) / 0.05) * 0.05;
-    const x1 = Math.max(0, a1 - d.col1_L / 2), x2 = Math.max(0, Lp - (a2 + d.col2_L / 2));
-    const y1 = (Bp - d.col1_B) / 2, y2 = (Bp - d.col2_B) / 2;
+    // Volados con la geometría REALMENTE en uso (d.L, d.B) — no la
+    // sugerencia Lp, Bp — para que el boceto y estos valores reflejen
+    // siempre lo que el usuario haya puesto en "Geometría".
+    const x1 = Math.max(0, a1 - d.col1_L / 2), x2 = Math.max(0, d.L - (a2 + d.col2_L / 2));
+    const y1 = (d.B - d.col1_B) / 2, y2 = (d.B - d.col2_B) / 2;
 
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1°) Verificamos por cargas de gravedad más momentos</h4>
@@ -1629,9 +1636,9 @@ export class AppUIController {
         ${this._specRow('x̄ (centroide, desde borde izq.)', `${x_R.toFixed(2)} m`)}
         ${this._specRow('Área tentativa (A)', `${A_req.toFixed(2)} m²`)}
       </table>
-      <div class="flex justify-center mb-2">${this._combinedPredimSketchSvg(Lp, Bp, a1, d.col1_L, d.col1_B, a2, d.col2_L, d.col2_B)}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones sugeridas (a partir de las cargas): L = ${Lp.toFixed(2)} m &nbsp; B = ${Bp.toFixed(2)} m</p>
-      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Geometría"): L = ${d.L.toFixed(2)} m &nbsp; B = ${d.B.toFixed(2)} m ${Math.abs(d.L - Lp) > 0.001 || Math.abs(d.B - Bp) > 0.001 ? '— distintas de la sugerencia' : '— igual a la sugerencia'}</p>
+      <div class="flex justify-center mb-2">${this._combinedPredimSketchSvg(d.L, d.B, a1, d.col1_L, d.col1_B, a2, d.col2_L, d.col2_B)}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Dimensiones actualmente en uso: L = ${d.L.toFixed(2)} m &nbsp; B = ${d.B.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">(sugerencia mínima a partir de las cargas: L = ${Lp.toFixed(2)} m, B = ${Bp.toFixed(2)} m — edítalas arriba, en "Geometría", si quieres adoptarla)</p>
       <table class="text-xs w-full mt-2">
         ${this._specRow('Volado x1 (izquierdo)', `${x1.toFixed(2)} m`)}
         ${this._specRow('Volado x2 (derecho)', `${x2.toFixed(2)} m`)}
@@ -2131,9 +2138,9 @@ export class AppUIController {
         ${this._specRow('Volado calculado (c)', `${c1Raw.toFixed(2)} m`)}
         ${this._specRow('Volado redondeado (c)', `${c1Round.toFixed(2)} m`)}
       </table>
-      <div class="flex justify-center mb-2">${this._predimSketchSvg(L1p, B1p, d.col1_L, d.col1_B, c1Round, 'medianera')}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 1 sugerida (a partir de las cargas): L1 = ${L1p.toFixed(2)} m &nbsp; B1 = ${B1p.toFixed(2)} m</p>
-      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Zapata 1"): L1 = ${d.L1.toFixed(2)} m &nbsp; B1 = ${d.B1.toFixed(2)} m</p>`;
+      <div class="flex justify-center mb-2">${this._predimSketchSvg(d.L1, d.B1, d.col1_L, d.col1_B, 'medianera')}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 1 — dimensiones actualmente en uso: L1 = ${d.L1.toFixed(2)} m &nbsp; B1 = ${d.B1.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">(sugerencia mínima a partir de las cargas: L1 = ${L1p.toFixed(2)} m, B1 = ${B1p.toFixed(2)} m — edítalas arriba, en "Zapata 1", si quieres adoptarla)</p>`;
 
     // 2°) R1, R2 — método de la viga rígida, con la geometría YA VIGENTE
     // (d.L1, no la tentativa L1p) para mostrar el estado actual real.
@@ -2169,9 +2176,9 @@ export class AppUIController {
         ${this._specRow('Volado calculado (c)', `${c2Raw.toFixed(2)} m`)}
         ${this._specRow('Volado redondeado (c)', `${c2Round.toFixed(2)} m`)}
       </table>
-      <div class="flex justify-center mb-2">${this._predimSketchSvg(L2p, B2p, d.col2_L, d.col2_B, c2Round, 'interior')}</div>
-      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 2 sugerida (a partir de las cargas): L2 = ${L2p.toFixed(2)} m &nbsp; B2 = ${B2p.toFixed(2)} m</p>
-      <p class="text-[11px] text-slate-500 text-center">Dimensiones actualmente en uso (editable arriba, en "Zapata 2"): L2 = ${d.L2.toFixed(2)} m &nbsp; B2 = ${d.B2.toFixed(2)} m</p>`;
+      <div class="flex justify-center mb-2">${this._predimSketchSvg(d.L2, d.B2, d.col2_L, d.col2_B, 'interior')}</div>
+      <p class="text-xs font-semibold text-slate-800 text-center">Zapata 2 — dimensiones actualmente en uso: L2 = ${d.L2.toFixed(2)} m &nbsp; B2 = ${d.B2.toFixed(2)} m</p>
+      <p class="text-[11px] text-slate-500 text-center">(sugerencia mínima a partir de las cargas: L2 = ${L2p.toFixed(2)} m, B2 = ${B2p.toFixed(2)} m — edítalas arriba, en "Zapata 2", si quieres adoptarla)</p>`;
 
     // 4°) Verificación de la presión de contacto de servicio, con la
     // geometría VIGENTE (d.L1/B1/L2/B2) — reutiliza geo (calculateConnectedBearing).
