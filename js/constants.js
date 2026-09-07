@@ -276,7 +276,7 @@ export const PRESET_PROJECTS = {
       d.footing_type = 'combinada';
       d.foundation.q_adm_kgcm2 = 1.5;
       d.combined = {
-        L: 2.4, B: 1.3, h: 0.6, a1: 0.75, s: 1.1,
+        L: 1.95, B: 1.2, h: 0.6, a1: 0.6, s: 1.2,
         col1_L: 0.3, col1_B: 0.3, col2_L: 0.3, col2_B: 0.25,
         Df: 2.5,
         P1d: 5.4148, P1l: 0.24,
@@ -286,7 +286,7 @@ export const PRESET_PROJECTS = {
         P2d: 13.667, P2l: 1.7,
         Mx2_d: 0.2138, Mx2_l: 0.0217, My2_d: 0.0935, My2_l: 0.0217,
         Psx2: 0.1986, Mx2_sx: 0.0, My2_sx: 0.0449,
-        Psy2: 11.1376, Mx2_sy: 0.3386, My2_sy: 0.0,
+        Psy2: 0.334, Mx2_sy: 0.1454, My2_sy: 0.0,
         seismic_bearing_factor: 1.25,
         fz: 0.1,
       };
