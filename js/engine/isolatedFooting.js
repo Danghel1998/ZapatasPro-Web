@@ -1,7 +1,6 @@
 /**
  * Motor de diseño estructural de una zapata AISLADA (Norma E.060 / ACI 318),
- * siguiendo la hoja de cálculo real de referencia (Efrén — "ZAPATA TIPO
- * 1.xlsx"). Traduce los datos de entrada (isolated.*, en tn/tn·m) a los
+ * siguiendo la hoja de cálculo real de referencia. Traduce los datos de entrada (isolated.*, en tn/tn·m) a los
  * parámetros que necesita el diseño genérico de losa de zapata
  * (designFootingSlab, en kN/kN·m) — ver ese archivo para el detalle del
  * cálculo (punzonamiento, corte en una dirección, flexión con bandas,

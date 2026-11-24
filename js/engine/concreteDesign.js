@@ -11,7 +11,7 @@ export const PHI_SHEAR = 0.85; // E.060 9.3.2 (corte y punzonamiento)
 /**
  * Acero mínimo de VIGA (no losa) en unidades kg/cm² directas — E.060
  * 10.5 / ACI 318 9.6.1.2, expresión equivalente 0.7√f'c/fy (misma
- * convención de la hoja de cálculo de referencia Efrén para la viga de
+ * convención de la hoja de cálculo de referencia para la viga de
  * conexión). fc, fy en kg/cm²; b, d en cm; resultado en cm².
  */
 export function beamAsMin_cm2(fc_kgcm2, fy_kgcm2, b_cm, d_cm) {
@@ -53,7 +53,7 @@ export function hookStirrup_m(diameter_mm, diameter_m) {
  *   - Losa/zapata (se pasa `h_m`, el peralte TOTAL bruto): ACI 318
  *     7.6.1.1 / 8.6.1.1 remiten al mínimo de retracción y temperatura
  *     (24.4.3.2) — 0.0018·b·h — NO al mínimo de viga (confirmado contra
- *     la hoja de cálculo de referencia Efrén, que solo aplica este
+ *     la hoja de cálculo de referencia, que solo aplica este
  *     mínimo). Aplicar el mínimo de viga aquí sobre-diseña el acero de
  *     zapatas de forma significativa e incorrecta.
  *   - Viga (no se pasa `h_m`, p.ej. una viga de conexión/strap beam): ACI

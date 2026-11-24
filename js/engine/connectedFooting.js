@@ -1,7 +1,6 @@
 /**
  * Motor de diseño estructural de una zapata CONECTADA (Norma E.060 / ACI
- * 318), siguiendo la hoja de cálculo real de referencia (Efrén — "ZAPATA
- * CONECTADA.xlsx"): Zapata 1 (excéntrica, columna en el límite de
+ * 318), siguiendo la hoja de cálculo real de referencia: Zapata 1 (excéntrica, columna en el límite de
  * propiedad) + Zapata 2 (interior, concéntrica), unidas por una viga de
  * conexión ("strap beam") modelada como un elemento con dos cargas
  * puntuales (P1, P2, en las columnas) y dos reacciones puntuales (R1, R2,

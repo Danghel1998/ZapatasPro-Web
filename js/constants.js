@@ -27,7 +27,7 @@ export const DEFAULT_FOOTING_DATA = {
 
   // ---- Zapata Aislada ----
   // Valores por defecto = caso de verificación de la hoja de cálculo real
-  // de referencia (Efrén, "ZAPATA TIPO 1.xlsx"), columna interior 0.30×0.30.
+  // de referencia, columna interior 0.30×0.30.
   isolated: {
     // Geometría en planta: L = dirección X, B = dirección Y (m)
     L: 2.10,
@@ -50,7 +50,7 @@ export const DEFAULT_FOOTING_DATA = {
     Psy: 0.4594, Mx_sy: 0.115, My_sy: 0.0,
     // Incremento admisible en la capacidad portante para combinaciones
     // que incluyen sismo (E.030) — 1.25 según la hoja de cálculo de
-    // referencia (Efrén, "ZAPATA TIPO 1.xlsx"). Queda configurable.
+    // referencia. Queda configurable.
     seismic_bearing_factor: 1.25,
     // Factor de peso propio estimado ("fz" de la hoja de referencia):
     // sustituye el cálculo del peso propio real de la zapata + relleno —
@@ -69,7 +69,7 @@ export const DEFAULT_FOOTING_DATA = {
   // borde izquierdo de la zapata (medianera); la columna 2 es interior.
   //
   // Valores por defecto = caso de verificación de la hoja de cálculo real
-  // de referencia (Efrén, "ZAPATA COMBINADA.xlsx"), columna 1 medianera
+  // de referencia, columna 1 medianera
   // 1.50×0.25, columna 2 interior 0.60×0.40. Mismo esquema Mx/My que la
   // zapata aislada y conectada: Mx produce excentricidad en la dirección
   // B (transversal), My en la dirección L (longitudinal, a lo largo del
@@ -114,7 +114,7 @@ export const DEFAULT_FOOTING_DATA = {
   // uniforme sin necesitar invadir el terreno vecino.
   //
   // Valores por defecto = caso de verificación de la hoja de cálculo real
-  // de referencia (Efrén, "ZAPATA CONECTADA.xlsx"), columna 1 medianera
+  // de referencia, columna 1 medianera
   // 0.40×0.60, columna 2 interior 0.25×1.90.
   connected: {
     L1: 2.40, B1: 2.45, h1: 0.60, // Zapata 1 (excéntrica, en el límite)
@@ -154,7 +154,7 @@ export const DEFAULT_FOOTING_DATA = {
   foundation: {
     gamma_kgm3: 1800.0,   // peso específico del suelo (kg/m³)
     phi: 30.0,            // ángulo de fricción interna (°), referencial
-    q_adm_kgcm2: 1.20,    // capacidad portante admisible del estudio de suelos (kg/cm²), a la profundidad Df — hoja de referencia Efrén
+    q_adm_kgcm2: 1.20,    // capacidad portante admisible del estudio de suelos (kg/cm²), a la profundidad Df — hoja de referencia
     // 'si' | 'no' — si no hay Estudio de Mecánica de Suelos (EMS), la app
     // muestra una recomendación técnica de mejoramiento de suelos (ver
     // updateSoilStudyVisibility en uiController.js); no afecta el cálculo.
@@ -191,7 +191,7 @@ export const DEFAULT_FOOTING_DATA = {
 export const PRESET_PROJECTS = {
   zapata_aislada_tipica: {
     title: '⭐ Zapata Aislada Típica',
-    desc: 'Columna interior 0.30×0.30 m, h=0.60 m, con cargas de gravedad y sismo en X e Y — misma metodología (fz=0.08, factor sismo=1.25, q_adm=1.2 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA TIPO 1.xlsx".',
+    desc: 'Columna interior 0.30×0.30 m, h=0.60 m, con cargas de gravedad y sismo en X e Y — misma metodología (fz=0.08, factor sismo=1.25, q_adm=1.2 kg/cm²) de la hoja de cálculo real de referencia.',
     data: JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA))
   },
   zapata_aislada_excentrica: {
@@ -259,8 +259,8 @@ export const PRESET_PROJECTS = {
     })()
   },
   zapata_combinada_tipica: {
-    title: 'Zapata Combinada — Caso de Verificación (Efrén)',
-    desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por una losa rígida única — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA COMBINADA.xlsx".',
+    title: 'Zapata Combinada — Caso de Verificación',
+    desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por una losa rígida única — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia.',
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'combinada';
@@ -304,8 +304,8 @@ export const PRESET_PROJECTS = {
     })()
   },
   zapata_conectada_tipica: {
-    title: 'Zapata Conectada — Caso de Verificación (Efrén)',
-    desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por viga de conexión — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia "ZAPATA CONECTADA.xlsx".',
+    title: 'Zapata Conectada — Caso de Verificación',
+    desc: 'Columna 1 medianera (límite de propiedad) + columna 2 interior, con cargas de gravedad y sismo en X e Y, unidas por viga de conexión — misma metodología (fz=0.1, factor sismo=1.25, q_adm=0.8 kg/cm²) de la hoja de cálculo real de referencia.',
     data: (() => {
       const d = JSON.parse(JSON.stringify(DEFAULT_FOOTING_DATA));
       d.footing_type = 'conectada';

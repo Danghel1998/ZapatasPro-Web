@@ -407,7 +407,7 @@ export class AppUIController {
 
   /**
    * Predimensionamiento de zapata combinada — hoja de cálculo de
-   * referencia (Efrén, "ZAPATA COMBINADA.xlsx"), en un solo paso (sin
+   * referencia, en un solo paso (sin
    * iterar, el factor "fz" ya aproxima el peso propio):
    *   1. Centroide de cargas de servicio (sin sismo), medido desde el
    *      borde izquierdo: x̄ = a1 + (P2·s + My1 + My2)/(P1+P2), donde "s"
@@ -443,7 +443,7 @@ export class AppUIController {
 
   /**
    * Predimensionamiento de zapata conectada — hoja de cálculo de
-   * referencia (Efrén, "ZAPATA CONECTADA.xlsx"): en un solo paso (sin
+   * referencia: en un solo paso (sin
    * iterar, el factor "fz" ya aproxima el peso propio):
    *   1. Zapata 1 (excéntrica): A1 = P1(1+fz)/q_adm, repartida con
    *      _solveEdgeLB (volado "c" hacia un solo lado en L — al ras del
@@ -490,7 +490,7 @@ export class AppUIController {
 
   /**
    * Predimensionamiento de zapata aislada — hoja de cálculo de referencia
-   * (Efrén, "ZAPATA TIPO 1.xlsx"): área tentativa A = P(1+fz)/q_adm (sin
+   *: área tentativa A = P(1+fz)/q_adm (sin
    * iterar con el peso propio real — el factor "fz" ya lo aproxima), y
    * reparto del volado "c" según el tipo de columna — simétrico en ambas
    * direcciones si es interior, hacia un solo lado en L si es
@@ -1160,7 +1160,7 @@ export class AppUIController {
 
   /**
    * Sección "II) PREDIMENSIONAMIENTO", al estilo de la hoja de cálculo de
-   * referencia (Efrén — "ZAPATA TIPO 1.xlsx"): 1°) área tentativa por
+   * referencia: 1°) área tentativa por
    * cargas de gravedad (A = P(1+fz)/q_adm, mismo método y volado "c" que
    * usa el botón "Predimensionar" — ver predimensionIsolated) y 2°)
    * verificación por gravedad + momento + sismo con el detalle de las 4
@@ -1392,7 +1392,7 @@ export class AppUIController {
 
   /**
    * Caja "III) DISEÑO" de la zapata aislada, al estilo de la hoja de
-   * cálculo de referencia (Efrén): 1) combinaciones de diseño (ya
+   * cálculo de referencia: 1) combinaciones de diseño (ya
    * calculadas en str.envelope), 2) punzonamiento, 3) corte en una
    * dirección y 4) flexión — con las direcciones L y B mostradas juntas
    * (nuestro motor, a diferencia de la hoja de referencia, sí distingue
@@ -1619,7 +1619,7 @@ export class AppUIController {
 
   /**
    * Caja "II) PREDIMENSIONAMIENTO" de la zapata combinada, al estilo de la
-   * hoja de cálculo de referencia (Efrén — "ZAPATA COMBINADA.xlsx"): 1°)
+   * hoja de cálculo de referencia: 1°)
    * centroide de cargas de gravedad llevadas hacia la columna 1 y área
    * tentativa; 2°) verificación con sismo (4 esquinas, trapezoidal +
    * rectangular equivalente); 3°) resumen final con la geometría vigente.
@@ -1631,7 +1631,7 @@ export class AppUIController {
     const M1 = (d.My1_d || 0) + (d.My1_l || 0), M2 = (d.My2_d || 0) + (d.My2_l || 0);
     const a1 = d.a1, s = d.s, a2 = a1 + s;
 
-    // "x" — mismo nombre que la hoja de cálculo de referencia (Efrén): la
+    // "x" — mismo nombre que la hoja de cálculo de referencia: la
     // distancia del EJE DE LA COLUMNA 1 al centroide de la resultante (NO
     // desde el borde izquierdo). x̄ (con barra) es esa misma distancia pero
     // medida desde el borde izquierdo (x̄ = a1 + x) — la que usamos para
@@ -2137,7 +2137,7 @@ export class AppUIController {
 
   /**
    * Caja "II) PREDIMENSIONAMIENTO" de la zapata conectada — hoja de
-   * cálculo de referencia (Efrén, "ZAPATA CONECTADA.xlsx"): 1°) Zapata 1
+   * cálculo de referencia: 1°) Zapata 1
    * (excéntrica) por cargas de gravedad; 2°) reacciones R1/R2 por el
    * método de la viga rígida; 3°) Zapata 2 (interior) a partir de R2; 4°)
    * verificación de la presión de contacto de servicio de cada zapata

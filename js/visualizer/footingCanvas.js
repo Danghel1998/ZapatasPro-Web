@@ -6,6 +6,35 @@
 
 import { hookMainBar_m } from '../engine/concreteDesign.js';
 
+
+/**
+ * Posiciones de las barras de la dirección corta (banda central + franjas
+ * exteriores, ACI 318) a lo largo de un lado de semilongitud `edge`.
+ * La banda va centrada en la columna (`center`), pero si la columna está
+ * en el borde (medianera/esquinera) la banda se desplaza hacia el interior
+ * para quedar completa dentro de la losa; las franjas exteriores cubren
+ * TODO el resto del lado (a cada lado de la banda), con su propio
+ * espaciamiento o, si no lo hay, con el de la banda. Así el acero nunca
+ * queda cortado a mitad de la zapata.
+ */
+export function shortDirBarPositions(edge, bandWidth, center, spBandCm, spOuterCm) {
+  const bw = Math.min(bandWidth, 2 * edge);
+  let lo = center - bw / 2, hi = center + bw / 2;
+  if (hi > edge) { lo -= hi - edge; hi = edge; }
+  if (lo < -edge) { hi += -edge - lo; lo = -edge; }
+  const band = [], outer = [];
+  const sb = (spBandCm || 20) / 100, so = (spOuterCm || spBandCm || 20) / 100;
+  const nb = Math.max(1, Math.round((hi - lo) / sb));
+  for (let i = 0; i < nb; i++) band.push(lo + (i + 0.5) * (hi - lo) / nb);
+  const fill = (a, b) => {
+    const w = b - a; if (w < so / 2) return;
+    const n = Math.max(1, Math.round(w / so));
+    for (let i = 0; i < n; i++) outer.push(a + (i + 0.5) * w / n);
+  };
+  fill(-edge, lo); fill(hi, edge);
+  return { band, outer, lo, hi };
+}
+
 export class FootingCanvasRenderer {
   constructor(canvasElement) {
     this.canvas = canvasElement;
@@ -301,22 +330,15 @@ export class FootingCanvasRenderer {
     // excéntrica (borde/esquina). Se recorta al borde real de la losa.
     const bandCenter = longIsL ? colCx : colCy;
     const edgeLimit = (longIsL ? L : B) / 2;
-    const bandHalf = slab.banding.bandWidth / 2;
-    drawParallelBars(shortAxis, slab.banding.sp_band, shortRunHalf, bandHalf, '#dc2626', bandCenter, edgeLimit);
-    if (slab.banding.sp_outer) {
-      const outerWidth = slab.banding.outerWidthEach;
-      const spacing_m = slab.banding.sp_outer / 100;
-      ctx.strokeStyle = '#f97316';
-      for (let d = spacing_m / 2; d <= outerWidth - spacing_m / 2 + 1e-6; d += spacing_m) {
-        [bandCenter + bandHalf + d, bandCenter - bandHalf - d].forEach((p) => {
-          if (p < -edgeLimit || p > edgeLimit) return;
-          ctx.beginPath();
-          if (shortAxis === 'L') { ctx.moveTo(t.toX(cx - shortRunHalf), t.toY(p)); ctx.lineTo(t.toX(cx + shortRunHalf), t.toY(p)); }
-          else { ctx.moveTo(t.toX(cx + p), t.toY(-shortRunHalf)); ctx.lineTo(t.toX(cx + p), t.toY(shortRunHalf)); }
-          ctx.stroke();
-        });
-      }
-    }
+    const pos = shortDirBarPositions(edgeLimit, slab.banding.bandWidth, bandCenter, slab.banding.sp_band, slab.banding.sp_outer);
+    const drawAt = (p, color) => {
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath();
+      if (shortAxis === 'L') { ctx.moveTo(t.toX(cx - shortRunHalf), t.toY(p)); ctx.lineTo(t.toX(cx + shortRunHalf), t.toY(p)); }
+      else { ctx.moveTo(t.toX(cx + p), t.toY(-shortRunHalf)); ctx.lineTo(t.toX(cx + p), t.toY(shortRunHalf)); }
+      ctx.stroke();
+    };
+    pos.band.forEach((p) => drawAt(p, '#dc2626'));
+    pos.outer.forEach((p) => drawAt(p, slab.banding.sp_outer ? '#f97316' : '#dc2626'));
     ctx.strokeStyle = this._palette().columnStroke;
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(t.toX(cx + colCx - colL / 2), t.toY(colCy + colB / 2), colL * t.scale, colB * t.scale);
@@ -443,25 +465,15 @@ export class FootingCanvasRenderer {
       // dibujado más cerca del borde que el recubrimiento real (mismo
       // margen que usa la línea azul).
       const edgeLimit = L / 2 - cover - rMain;
-      const bandHalf = str.banding.bandWidth / 2;
-      const bandLo = Math.max(-edgeLimit, ex - bandHalf);
-      const bandHi = Math.min(edgeLimit, ex + bandHalf);
-      const spBand = (str.banding.sp_band || 20) / 100;
-      for (let p = bandLo + spBand / 2; p <= bandHi - spBand / 2 + 1e-6; p += spBand) dotPositions.push(p);
-      if (str.banding.sp_outer) {
-        const spOuter = str.banding.sp_outer / 100;
-        const outerWidth = str.banding.outerWidthEach;
-        for (let d = spOuter / 2; d <= outerWidth - spOuter / 2 + 1e-6; d += spOuter) {
-          [bandHi + d, bandLo - d].forEach((p) => { if (p >= -edgeLimit && p <= edgeLimit) dotPositions.push(p); });
-        }
-      }
-      dotSpacingLabel = `${str.banding.sp_band} cm (banda central) / ${str.banding.sp_outer ?? '—'} cm (exterior)`;
+      const pos = shortDirBarPositions(edgeLimit, str.banding.bandWidth, ex, str.banding.sp_band, str.banding.sp_outer);
+      dotPositions.push(...pos.band, ...pos.outer);
+      dotSpacingLabel = (str.banding.sp_outer ? `${str.banding.sp_band} cm (banda central) / ${str.banding.sp_outer} cm (exterior)` : `${str.banding.sp_band} cm`);
     } else {
       dotSpacingLabel = `${str.B_dir.spacing} cm`;
       const sp = (str.B_dir.spacing || 20) / 100;
       const half = L / 2 - cover - rMain;
       for (let p = -half + sp / 2; p <= half - sp / 2 + 1e-6; p += sp) dotPositions.push(p);
-      lineSpacingLabel = `${str.banding.sp_band} cm (banda central) / ${str.banding.sp_outer ?? '—'} cm (exterior)`;
+      lineSpacingLabel = (str.banding.sp_outer ? `${str.banding.sp_band} cm (banda central) / ${str.banding.sp_outer} cm (exterior)` : `${str.banding.sp_band} cm`);
     }
     const yDot = t.toY(dotDepth);
     ctx.save();
