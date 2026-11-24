@@ -1,8 +1,7 @@
 /**
  * Motor de diseño estructural de una zapata COMBINADA (2 columnas, ancho B
  * constante — losa rígida única que abarca ambas columnas), Norma E.060 /
- * ACI 318, siguiendo la hoja de cálculo real de referencia (Efrén —
- * "ZAPATA COMBINADA.xlsx"): columna 1 medianera (al ras del borde
+ * ACI 318, siguiendo la hoja de cálculo real de referencia: columna 1 medianera (al ras del borde
  * izquierdo) + columna 2 interior.
  *
  * La presión de diseño ("su") se obtiene de una envolvente de combinaciones

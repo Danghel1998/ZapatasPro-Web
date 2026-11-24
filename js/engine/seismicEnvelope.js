@@ -1,7 +1,7 @@
 /**
  * Envolvente de combinaciones de carga (gravedad + sismo en X e Y) para
  * zapatas aisladas, siguiendo el método de la hoja de cálculo real de
- * referencia (Efrén — "ZAPATA TIPO 1.xlsx"): presión de contacto biaxial
+ * referencia: presión de contacto biaxial
  * en las 4 esquinas (o su equivalente rectangular si alguna esquina
  * resulta en tracción), evaluada para cada combinación, tomando la más
  * desfavorable como gobernante. Se usa tanto a nivel de servicio
@@ -83,8 +83,7 @@ export function evaluateEnvelope(cases, L, B) {
 
 /**
  * Ajusta el resultado de evaluateEnvelope() para el chequeo LOCAL de cada
- * zapata de una zapata conectada — hoja de cálculo de referencia (Efrén,
- * "ZAPATA CONECTADA.xlsx"): ahí "My" siempre vale 0 (el efecto
+ * zapata de una zapata conectada — hoja de cálculo de referencia: ahí "My" siempre vale 0 (el efecto
  * longitudinal ya está absorbido en R1/R2, ver calculateConnectedBearing/
  * calculateConnectedStructural), y el respaldo rectangular de esa hoja
  * solo implementa la fórmula que depende de "My" — al ser siempre 0, se

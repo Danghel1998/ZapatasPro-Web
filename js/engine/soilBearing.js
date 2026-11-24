@@ -25,7 +25,7 @@ export function calculateIsolatedBearing(footingData) {
   const Mx = tnToKn(isolated.Mx_d + isolated.Mx_l);
   const My = tnToKn(isolated.My_d + isolated.My_l);
 
-  // Peso propio aproximado con el factor "fz" (hoja de referencia Efrén)
+  // Peso propio aproximado con el factor "fz" (hoja de referencia)
   // en vez del peso real de zapata+relleno: N = P_col·(1+fz).
   const fz = isolated.fz ?? 0.08;
   const A = L * B;
@@ -55,7 +55,7 @@ export function calculateIsolatedBearing(footingData) {
   // evaluada en ambos sentidos ±) — solo si se ingresó algún dato de
   // sismo; en caso contrario se omite y rige únicamente el caso biaxial
   // simple ya calculado arriba. Mismo método que la hoja de cálculo real
-  // de referencia (Efrén): σ = P/A ± 6Mx/(BL²) ± 6My/(LB²), con la carga
+  // de referencia: σ = P/A ± 6Mx/(BL²) ± 6My/(LB²), con la carga
   // axial de gravedad inflada por (1+fz) como sustituto del peso propio.
   // Si el proyecto tiene datos de sismo, el límite amplificado
   // (factor·q_adm) rige para las 5 combinaciones — incluida CM+CV —, no
@@ -149,7 +149,7 @@ export function calculateIsolatedBearing(footingData) {
 
 /**
  * Calcula el "ex" fijo del método de la hoja de cálculo real de referencia
- * (Efrén, "ZAPATA COMBINADA.xlsx"): la excentricidad longitudinal de
+ *: la excentricidad longitudinal de
  * servicio se calcula UNA SOLA VEZ (a partir del caso CM+CV+SXD) y se
  * reutiliza igual para TODAS las combinaciones — incluida CM+CV sin sismo
  * — como My = P·ex, en vez de recalcular el brazo de cada columna por
@@ -320,8 +320,7 @@ export function calculateCombinedBearing(footingData) {
 /**
  * Redistribuye las cargas de gravedad (+ sismo longitudinal, si se pasa)
  * de ambas columnas hacia las reacciones de zapata R1/R2, por el método
- * de la viga rígida (hoja de cálculo de referencia Efrén, "ZAPATA
- * CONECTADA.xlsx"): R2 = P2 − P1·e1/denom + (My1+My2)/denom, R1 = P1+P2−R2.
+ * de la viga rígida (hoja de cálculo de referencia): R2 = P2 − P1·e1/denom + (My1+My2)/denom, R1 = P1+P2−R2.
  * "My" es el momento de cada columna en el plano de la viga de conexión
  * (misma dirección que la excentricidad e1).
  */
