@@ -64,7 +64,12 @@ export function calculateIsolatedStructural(footingData) {
     || Math.abs(isolated.Mx_sy || 0) > 1e-9 || Math.abs(isolated.My_sy || 0) > 1e-9;
 
   const { L, B } = isolated;
-  const fz = isolated.fz ?? 0.08;
+  // Presión NETA para el diseño estructural (E.060): el peso propio de la
+  // zapata y del relleno actúa hacia abajo sobre la misma área y se anula
+  // con la parte de la reacción del suelo que genera, así que no produce
+  // corte, punzonamiento ni flexión en la losa. Por eso aquí fz = 0 (el
+  // factor fz sigue usándose en la verificación geotécnica de servicio).
+  const fz = 0;
   const Pd = tnToKn(isolated.Pd), Pl = tnToKn(isolated.Pl);
   const Mxd = tnToKn(isolated.Mx_d), Mxl = tnToKn(isolated.Mx_l);
   const Myd = tnToKn(isolated.My_d), Myl = tnToKn(isolated.My_l);
