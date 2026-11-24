@@ -172,17 +172,16 @@ export function combinedFixedEx(P1, P2, M1, M2, s, Psx1 = 0, Psx2 = 0, My1sx = 0
 
 /**
  * Verificación geotécnica de una zapata COMBINADA (2 columnas, ancho B
- * constante — losa rígida única). Igual que la zapata aislada, la presión
- * de contacto es BIAXIAL; el momento transversal (a lo largo de B) viene
- * del momento propio de cada columna (se asume ambas centradas en B). El
- * momento longitudinal (a lo largo de L) usa el "ex" fijo del método de
- * la hoja de cálculo real de referencia — ver combinedFixedEx: My = P·ex
- * para todas las combinaciones, en vez de recalcular el brazo de cada
- * columna por caso. El peso propio se aproxima con el factor "fz" (ver
- * evaluateEnvelope) en vez de calcularlo con la geometría real — mismo
- * criterio que la hoja de referencia: A = R(1+k)/s. Si hay datos de
- * sismo, se evalúa además la envolvente de 5 combinaciones de servicio
- * (CM+CV, CM+CV±SXD, CM+CV±SYD) — mismo criterio que la zapata aislada.
+ * constante — losa rígida única). La presión de contacto es BIAXIAL: el
+ * momento transversal (a lo largo de B) viene del momento propio de cada
+ * columna (ambas centradas en B) y el momento longitudinal (a lo largo de L)
+ * se calcula EN CADA COMBINACIÓN con sus propias cargas:
+ *   My_L = P1c·(a1 − L/2) + P2c·(a2 − L/2) + M1c + M2c
+ * (P y M de cada columna en esa combinación, incluido el sismo con su signo).
+ * Así la combinación de gravedad no arrastra la excentricidad del sismo y
+ * cada caso sísmico usa su propia resultante. "ex" (desplazamiento de la
+ * resultante por el caso CM+CV+SXD) se conserva solo como dato informativo.
+ * El peso propio se aproxima con el factor "fz" (A = R(1+k)/s).
  */
 export function calculateCombinedBearing(footingData) {
   const { combined, foundation } = footingData;
@@ -205,21 +204,19 @@ export function calculateCombinedBearing(footingData) {
   const Psx1_0 = tnToKn(combined.Psx1 || 0), Psx2_0 = tnToKn(combined.Psx2 || 0);
   const My1sx_0 = tnToKn(combined.My1_sx || 0), My2sx_0 = tnToKn(combined.My2_sx || 0);
 
-  const ex = combinedFixedEx(P1, P2, My1own, My2own, s, Psx1_0, Psx2_0, My1sx_0, My2sx_0);
+  const ex = combinedFixedEx(P1, P2, My1own, My2own, s, Psx1_0, Psx2_0, My1sx_0, My2sx_0); // informativo
+  // Momento longitudinal respecto al centro de la losa para unas cargas dadas
+  const momL = (P1c, P2c, M1c, M2c) => P1c * (a1 - L / 2) + P2c * (a2 - L / 2) + M1c + M2c;
 
-  // Momento longitudinal total (causa gradiente en L) y transversal total
-  // (causa gradiente en B), bajo cargas de servicio SIN sismo.
-  const My_L = R * ex;
+  // Momentos bajo cargas de servicio SIN sismo.
+  const My_L = momL(P1, P2, My1own, My2own);
   const Mx_B = Mx1own + Mx2own;
 
-  const x_R = L / 2 + ex;
-  const e = ex;
+  const e = My_L / R;
+  const x_R = L / 2 + e;
   const e_max = L / 6.0;
-  const within_kern = Math.abs(e) <= e_max;
+  let within_kern = Math.abs(e) <= e_max;
 
-  // cornerPressures(N, Mx, My, L, B): su 1er momento causa gradiente en L
-  // (nuestro My_L), el 2° causa gradiente en B (nuestro Mx_B) — misma
-  // convención ya usada por la zapata conectada.
   const corners = cornerPressures(N, My_L, Mx_B, L, B);
   const cornerVals = Object.values(corners);
   let q_max = Math.max(...cornerVals), q_min = Math.min(...cornerVals);
@@ -249,34 +246,38 @@ export function calculateCombinedBearing(footingData) {
     const Psy1 = tnToKn(combined.Psy1 || 0), Mx1sy = tnToKn(combined.Mx1_sy || 0);
     const Psy2 = tnToKn(combined.Psy2 || 0), Mx2sy = tnToKn(combined.Mx2_sy || 0);
 
-    /** Construye un caso de servicio: My = (P1c+P2c)·ex, con el mismo "ex"
-     * fijo para las 5 combinaciones — igual que la hoja de cálculo de
-     * referencia (D72:D76 = B72:B76 * B$67) —, en vez de recalcular el
-     * brazo de cada columna por separado en cada combinación. */
-    function buildCase(label, Pseis1, Pseis2, Mx1seis, Mx2seis) {
+    const My1sx = tnToKn(combined.My1_sx || 0), My2sx = tnToKn(combined.My2_sx || 0);
+    const My1sy = tnToKn(combined.My1_sy || 0), My2sy = tnToKn(combined.My2_sy || 0);
+    /** Caso de servicio con su propia resultante: My_L de las cargas de ESA
+     * combinación (gravedad + sismo con signo), Mx_B = momentos transversales. */
+    function buildCase(label, Pseis1, Pseis2, Mx1seis, Mx2seis, My1seis, My2seis) {
       const P1c = P1 + Pseis1, P2c = P2 + Pseis2;
-      const My_L_case = (P1c + P2c) * ex;
+      const My_L_case = momL(P1c, P2c, My1own + My1seis, My2own + My2seis);
       const Mx_B_case = Mx1own + Mx2own + Mx1seis + Mx2seis;
       // E.050: la combinación de gravedad (sin sismo) se limita a q_adm.
-      const isGrav = Pseis1 === 0 && Pseis2 === 0 && Mx1seis === 0 && Mx2seis === 0;
-      return { label, Pgrav: R, Pseis: Pseis1 + Pseis2, Mx: My_L_case, My: Mx_B_case, fz, limit: isGrav ? q_adm : q_adm_seismic };
+      const isGrav = Pseis1 === 0 && Pseis2 === 0 && Mx1seis === 0 && Mx2seis === 0 && My1seis === 0 && My2seis === 0;
+      return { label, Pgrav: R, Pseis: Pseis1 + Pseis2, Mx: My_L_case, My: Mx_B_case, fz, limit: isGrav ? q_adm : q_adm_seismic,
+        e_L: My_L_case / (P1c + P2c) };
     }
     const cases = [
-      buildCase('CM+CV', 0, 0, 0, 0),
-      buildCase('CM+CV+SXD', Psx1, Psx2, Mx1sx, Mx2sx),
-      buildCase('CM+CV−SXD', -Psx1, -Psx2, -Mx1sx, -Mx2sx),
-      buildCase('CM+CV+SYD', Psy1, Psy2, Mx1sy, Mx2sy),
-      buildCase('CM+CV−SYD', -Psy1, -Psy2, -Mx1sy, -Mx2sy),
+      buildCase('CM+CV', 0, 0, 0, 0, 0, 0),
+      buildCase('CM+CV+SXD', Psx1, Psx2, Mx1sx, Mx2sx, My1sx, My2sx),
+      buildCase('CM+CV−SXD', -Psx1, -Psx2, -Mx1sx, -Mx2sx, -My1sx, -My2sx),
+      buildCase('CM+CV+SYD', Psy1, Psy2, Mx1sy, Mx2sy, My1sy, My2sy),
+      buildCase('CM+CV−SYD', -Psy1, -Psy2, -Mx1sy, -Mx2sy, -My1sy, -My2sy),
     ];
     const env = evaluateEnvelope(cases, L, B);
     seismic_envelope = {
-      rows: env.rows.map((r) => ({ ...r, q_governing_kgcm2: kpaToKgcm2(r.q_governing), limit_kgcm2: kpaToKgcm2(r.limit) })),
+      rows: env.rows.map((r, i) => ({ ...r, My_L_tn: knToTn(cases[i].Mx), e_L: cases[i].e_L, q_governing_kgcm2: kpaToKgcm2(r.q_governing), limit_kgcm2: kpaToKgcm2(r.limit) })),
       uses_rectangular: env.uses_rectangular,
       governing_q: env.governing_q,
       governing_q_kgcm2: kpaToKgcm2(env.governing_q),
       governingRow: env.governingRow,
       pass: env.rows.every((r) => r.pass),
+      e_max_seis: Math.max(...cases.map((c) => Math.abs(c.e_L))),
     };
+    // tercio medio también con sismo (resultante de cada combinación dentro de L/6)
+    within_kern = within_kern && seismic_envelope.e_max_seis <= e_max + 1e-9;
   }
 
   return {
@@ -286,6 +287,7 @@ export function calculateCombinedBearing(footingData) {
     R, R_tn: knToTn(R), N, N_tn: knToTn(N),
     fz, selfWeight_equiv_tn: knToTn(N) - knToTn(R),
     x_R, x_N: x_R, e, ex, e_max, within_kern,
+    e_kern: Math.max(Math.abs(e), seismic_envelope ? seismic_envelope.e_max_seis : 0),
     My_L, Mx_B,
     q_max, q_min,
     q_max_kgcm2: kpaToKgcm2(q_max),
