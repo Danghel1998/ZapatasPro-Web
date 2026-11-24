@@ -707,11 +707,11 @@ export class AppUIController {
       });
     } else if (isIsolated) {
       this.renderKPIBadge('kpi_eccentricity', {
-        title: 'Excentricidad (tercio medio)',
-        val: `ex=${(geo.ex * 100).toFixed(1)} / ey=${(geo.ey * 100).toFixed(1)} cm`,
+        title: geo.hasSeismic ? `Excentricidad (tercio medio, ${geo.kern_label})` : 'Excentricidad (tercio medio)',
+        val: `ex=${(geo.ex_rep * 100).toFixed(1)} / ey=${(geo.ey_rep * 100).toFixed(1)} cm`,
         req: `≤ ${(geo.ex_max * 100).toFixed(1)} / ${(geo.ey_max * 100).toFixed(1)}`,
         pass: geo.pass_kern,
-        progress: Math.max(Math.abs(geo.ex) / geo.ex_max, Math.abs(geo.ey) / geo.ey_max) * 100,
+        progress: Math.max(Math.abs(geo.ex_rep) / geo.ex_max, Math.abs(geo.ey_rep) / geo.ey_max) * 100,
       });
       this.renderKPIBadge('kpi_punching', {
         title: 'Punzonamiento (Vu / φVc)',
@@ -1316,14 +1316,16 @@ export class AppUIController {
         <tbody>
           ${geoRow('Excentricidad ex = Mx/N', `${(geo.ex * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.ex_max * 100).toFixed(2)} cm`, Math.abs(geo.ex) <= geo.ex_max)}
           ${geoRow('Excentricidad ey = My/N', `${(geo.ey * 100).toFixed(2)} cm`, `≤ B/6 = ${(geo.ey_max * 100).toFixed(2)} cm`, Math.abs(geo.ey) <= geo.ey_max)}
-          ${geoRow('Presión máxima de contacto q_max (sin sismo)', this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)}
+          ${geo.hasSeismic ? geoRow(`Excentricidad con sismo, más desfavorable (${geo.kern_label}) ex / ey`, `${(geo.ex_rep * 100).toFixed(2)} / ${(geo.ey_rep * 100).toFixed(2)} cm`, `≤ ${(geo.ex_max * 100).toFixed(2)} / ${(geo.ey_max * 100).toFixed(2)} cm`, geo.pass_kern) : ''}
+          ${geoRow('Presión máxima de contacto q_max (sin sismo)', this._p(geo.q_max_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_eff_kgcm2)}`, geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)}
         </tbody>
       </table>`;
     if (geo.effective_note) step3Html += `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ ${geo.effective_note}</p>`;
+    if (geo.kern_seismic_note) step3Html += `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ ${geo.kern_seismic_note}</p>`;
 
     if (geo.hasSeismic) {
       step3Html += `
-        <p class="text-[11px] text-slate-500 mb-2"><b>Envolvente sísmica de servicio:</b> σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para CM+CV, CM+CV±SXD y CM+CV±SYD. Al haber datos de sismo en el proyecto, las 5 combinaciones se limitan a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm.</p>
+        <p class="text-[11px] text-slate-500 mb-2"><b>Envolvente sísmica de servicio:</b> σ = P(1+fz)/(B·L) ± 6Mx/(B·L²) ± 6My/(L·B²), evaluado en las 4 esquinas de la zapata (o su rectángulo equivalente si alguna esquina resulta en tracción) para CM+CV, CM+CV±SXD y CM+CV±SYD. La combinación de gravedad CM+CV se limita a q_adm; las 4 con sismo, a ${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm (E.050).</p>
         <table class="text-xs w-full border-collapse mb-2">
           <thead><tr>
             <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
@@ -1438,7 +1440,7 @@ export class AppUIController {
   _disenoIsoladaHtml(d, str) {
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1) Combinaciones de diseño</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de la zapata para cada una (con el peso propio aproximado por el factor fz). La más desfavorable de todas se toma como la presión de diseño "σu", aplicada de forma uniforme sobre toda la zapata para punzonamiento, corte y flexión.</p>
+      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de la zapata para cada una, con la presión NETA (sin el peso propio de la zapata ni del relleno, que no generan esfuerzos en la losa). La más desfavorable de todas se toma como la presión de diseño "σu", aplicada de forma uniforme sobre toda la zapata para punzonamiento, corte y flexión.</p>
       <table class="text-xs w-full border-collapse mb-2">
         <thead><tr>
           <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
@@ -1783,7 +1785,7 @@ export class AppUIController {
         </tr></thead>
         <tbody>
           ${geoRow('Excentricidad longitudinal e', `${(geo.e * 100).toFixed(2)} cm`, `≤ L/6 = ${(geo.e_max * 100).toFixed(2)} cm`, geo.within_kern)}
-          ${geoRow(`Presión máxima de contacto q_max${geo.hasSeismic ? ' (sin sismo)' : ''}`, this._p(geo.q_max_kgcm2), `≤ ${geo.hasSeismic ? `${(d.seismic_bearing_factor ?? 1.25).toFixed(2)}·q_adm` : 'q_adm'} = ${this._p(geo.q_adm_eff_kgcm2)}`, geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)}
+          ${geoRow(`Presión máxima de contacto q_max${geo.hasSeismic ? ' (sin sismo)' : ''}`, this._p(geo.q_max_kgcm2), `≤ q_adm = ${this._p(geo.q_adm_eff_kgcm2)}`, geo.q_max_kgcm2 <= geo.q_adm_eff_kgcm2)}
         </tbody>
       </table>`;
     if (geo.effective_note) step3Html += `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">⚠️ ${geo.effective_note}</p>`;
@@ -1815,7 +1817,7 @@ export class AppUIController {
   _disenoCombinadaHtml(d, str) {
     const step1Html = `
       <h4 class="text-xs font-bold text-slate-700 mb-1">1) Combinaciones de diseño</h4>
-      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de toda la losa para cada una (con el peso propio aproximado por el factor fz y My = P·ex, el mismo "ex" fijo del paso 2° del predimensionamiento). La más desfavorable de todas se toma como la presión de diseño "su", aplicada de forma uniforme sobre toda la zapata para punzonamiento y las franjas en voladizo transversal.</p>
+      <p class="text-[11px] text-slate-500 mb-2">Se factoran las cargas con las combinaciones clásicas E.060/ACI 318 — 1.4CM+1.7CV${str.hasSeismic ? ', 1.25(CM+CV)±SXD/SYD y 0.9CM±SXD/SYD (9 en total)' : ''} — y se evalúa la presión de contacto en las 4 esquinas de toda la losa para cada una (con la presión NETA, sin peso propio, y My = P·ex, el mismo "ex" fijo del paso 2° del predimensionamiento). La más desfavorable de todas se toma como la presión de diseño "su", aplicada de forma uniforme sobre toda la zapata para punzonamiento y las franjas en voladizo transversal.</p>
       <table class="text-xs w-full border-collapse mb-2">
         <thead><tr>
           <th class="border border-slate-300 px-2 py-1 bg-sky-100 text-left">Combinación</th>
