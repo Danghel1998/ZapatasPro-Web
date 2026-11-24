@@ -101,7 +101,9 @@ export function calculateCombinedStructural(footingData) {
 
   const LF_D = safety_req.LF_D ?? 1.4;
   const LF_L = safety_req.LF_L ?? 1.7;
-  const fz = combined.fz ?? 0.1;
+  // Presión NETA para el diseño estructural (ver isolatedFooting.js): el
+  // peso propio no genera corte, punzonamiento ni flexión, así que fz = 0.
+  const fz = 0;
 
   // d = h − 0.10 m (misma convención "plana" que la zapata aislada y
   // conectada — ver dFlat en footingSlabDesign.js), única para toda la losa.
