@@ -48,7 +48,9 @@ export function calculateConnectedStructural(footingData) {
 
   const LF_D = safety_req.LF_D ?? 1.4;
   const LF_L = safety_req.LF_L ?? 1.7;
-  const fz = connected.fz ?? 0.1;
+  // Presión NETA para el diseño estructural (ver isolatedFooting.js): el
+  // peso propio no genera corte, punzonamiento ni flexión, así que fz = 0.
+  const fz = 0;
 
   const e1 = L1 / 2.0 - col1_L / 2.0;
   const sCentroid = connected.s + col1_L / 2.0 + col2_L / 2.0;
@@ -196,7 +198,8 @@ export function calculateConnectedStructural(footingData) {
     const Vc_kg = knToKg(Vc_strap);
     const Vs_req_kg = Math.max(1, (Vu_kg / PHI_SHEAR) - Vc_kg);
     const raw_s = (Av_cm2 * fy_kgcm2 * d_cm) / Vs_req_kg;
-    stirrup_spacing_cm = Math.max(5, Math.min(Math.floor(raw_s / 2.5) * 2.5, d_cm / 2.0));
+    // Redondeado hacia abajo a múltiplos de 2.5 cm también cuando gobierna d/2.
+    stirrup_spacing_cm = Math.max(5, Math.floor(Math.min(raw_s, d_cm / 2.0) / 2.5) * 2.5);
   } else {
     stirrup_spacing_cm = Math.floor(Math.min(30, d_cm / 2.0) / 2.5) * 2.5;
   }
