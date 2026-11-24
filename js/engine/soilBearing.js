@@ -68,7 +68,7 @@ export function calculateIsolatedBearing(footingData) {
     || Math.abs(isolated.Mx_sy || 0) > 1e-9 || Math.abs(isolated.My_sy || 0) > 1e-9;
 
   const q_adm_seismic = q_adm * (isolated.seismic_bearing_factor || 1.25);
-  const q_adm_eff = hasSeismic ? q_adm_seismic : q_adm;
+  const q_adm_eff = q_adm; // presión de gravedad (sin sismo): siempre ≤ q_adm (E.050)
   const pass_bearing = q_max <= q_adm_eff;
 
   let seismic_envelope = null;
@@ -77,7 +77,9 @@ export function calculateIsolatedBearing(footingData) {
     const Psy = tnToKn(isolated.Psy || 0), Mx_sy = tnToKn(isolated.Mx_sy || 0), My_sy = tnToKn(isolated.My_sy || 0);
 
     const cases = [
-      { label: 'CM+CV', Pgrav: P_col, Pseis: 0, Mx, My, fz, limit: q_adm_seismic },
+      // E.050: el incremento de q_adm (factor sísmico) solo vale para las
+      // combinaciones con sismo; la de gravedad CM+CV se limita a q_adm.
+      { label: 'CM+CV', Pgrav: P_col, Pseis: 0, Mx, My, fz, limit: q_adm },
       { label: 'CM+CV+SXD', Pgrav: P_col, Pseis: Psx, Mx: Mx + Mx_sx, My: My + My_sx, fz, limit: q_adm_seismic },
       { label: 'CM+CV−SXD', Pgrav: P_col, Pseis: -Psx, Mx: Mx - Mx_sx, My: My - My_sx, fz, limit: q_adm_seismic },
       { label: 'CM+CV+SYD', Pgrav: P_col, Pseis: Psy, Mx: Mx + Mx_sy, My: My + My_sy, fz, limit: q_adm_seismic },
@@ -98,7 +100,35 @@ export function calculateIsolatedBearing(footingData) {
     };
   }
 
+  // -------------------------------------------------------------------
+  // EXCENTRICIDAD CON SISMO: el chequeo de tercio medio de arriba usa solo
+  // los momentos de gravedad (Mx, My de servicio), que suelen ser casi
+  // nulos — con sismo la excentricidad real la dan las combinaciones
+  // CM+CV±SXD/SYD. Se evalúa e = M/N en cada combinación de servicio (N =
+  // P(1+fz)+Ps, el mismo N de la envolvente) y se reporta la más
+  // desfavorable. Si cae fuera del tercio medio, la presión ya se calculó
+  // con el rectángulo equivalente en la envolvente, así que el chequeo se
+  // da por cumplido siempre que la envolvente cumpla, con una nota.
+  // -------------------------------------------------------------------
+  let ex_rep = ex, ey_rep = ey, kern_label = 'CM+CV', kern_seismic_note = null;
+  let pass_kern = within_kern;
+  if (hasSeismic) {
+    let worst = Math.max(Math.abs(ex) / ex_max, Math.abs(ey) / ey_max);
+    seismic_envelope.rows.forEach((r) => {
+      if (Math.abs(r.N) < 1e-6) return;
+      const exr = r.Mx / r.N, eyr = r.My / r.N;
+      const ratio = Math.max(Math.abs(exr) / ex_max, Math.abs(eyr) / ey_max);
+      if (ratio > worst) { worst = ratio; ex_rep = exr; ey_rep = eyr; kern_label = r.label; }
+    });
+    const kern_all = worst <= 1 + 1e-9;
+    pass_kern = within_kern && (kern_all || seismic_envelope.pass);
+    if (!kern_all) {
+      kern_seismic_note = `Con sismo (${kern_label}) la resultante cae fuera del tercio medio (ex = ${(ex_rep * 100).toFixed(1)} cm, ey = ${(ey_rep * 100).toFixed(1)} cm): parte de la zapata se despega y la presión se evaluó con el rectángulo equivalente en la envolvente sísmica.`;
+    }
+  }
+
   return {
+    ex_rep, ey_rep, kern_label, kern_seismic_note,
     L, B, h, A, Df,
     N, N_tn: knToTn(N),
     P_col_tn: isolated.Pd + isolated.Pl,
@@ -111,9 +141,9 @@ export function calculateIsolatedBearing(footingData) {
     q_adm_eff_kgcm2: kpaToKgcm2(q_adm_eff),
     hasSeismic, seismic_envelope,
     pass_bearing: hasSeismic ? seismic_envelope.pass : pass_bearing,
-    pass_kern: within_kern,
+    pass_kern,
     effective_note,
-    pass_all: (hasSeismic ? seismic_envelope.pass : pass_bearing) && within_kern,
+    pass_all: (hasSeismic ? seismic_envelope.pass : pass_bearing) && pass_kern,
   };
 }
 
@@ -209,7 +239,7 @@ export function calculateCombinedBearing(footingData) {
     || Math.abs(combined.Mx2_sy || 0) > 1e-9 || Math.abs(combined.My2_sy || 0) > 1e-9;
 
   const q_adm_seismic = q_adm * (combined.seismic_bearing_factor || 1.25);
-  const q_adm_eff = hasSeismic ? q_adm_seismic : q_adm;
+  const q_adm_eff = q_adm; // presión de gravedad (sin sismo): siempre ≤ q_adm (E.050)
   const pass_bearing = q_max <= q_adm_eff;
 
   let seismic_envelope = null;
@@ -227,7 +257,9 @@ export function calculateCombinedBearing(footingData) {
       const P1c = P1 + Pseis1, P2c = P2 + Pseis2;
       const My_L_case = (P1c + P2c) * ex;
       const Mx_B_case = Mx1own + Mx2own + Mx1seis + Mx2seis;
-      return { label, Pgrav: R, Pseis: Pseis1 + Pseis2, Mx: My_L_case, My: Mx_B_case, fz, limit: q_adm_seismic };
+      // E.050: la combinación de gravedad (sin sismo) se limita a q_adm.
+      const isGrav = Pseis1 === 0 && Pseis2 === 0 && Mx1seis === 0 && Mx2seis === 0;
+      return { label, Pgrav: R, Pseis: Pseis1 + Pseis2, Mx: My_L_case, My: Mx_B_case, fz, limit: isGrav ? q_adm : q_adm_seismic };
     }
     const cases = [
       buildCase('CM+CV', 0, 0, 0, 0),
@@ -334,7 +366,7 @@ export function calculateConnectedBearing(footingData) {
     || Math.abs(connected.Mx2_sy || 0) > 1e-9 || Math.abs(connected.My2_sy || 0) > 1e-9;
 
   const q_adm_seismic = q_adm * (connected.seismic_bearing_factor || 1.25);
-  const q_adm_eff = hasSeismic ? q_adm_seismic : q_adm;
+  const q_adm_eff = q_adm; // presión de gravedad (sin sismo): siempre ≤ q_adm (E.050)
   const pass_bearing_1 = q1 <= q_adm_eff;
   const pass_bearing_2 = q2 <= q_adm_eff;
   const pass_positive_reaction = R2 > 0; // si R2 <= 0, el método de viga rígida no es aplicable (redimensionar)
@@ -362,7 +394,8 @@ export function calculateConnectedBearing(footingData) {
     const sxdMinus = redistributeRigidBeam(P1 - Psx1, P2 - Psx2, My1 - My1_sx, My2 - My2_sx, e1, denom);
 
     const cases = [
-      { label: 'CM+CV', R1, R2, Mx1: Mx1, Mx2: Mx2, limit: q_adm_seismic },
+      // E.050: la combinación de gravedad (sin sismo) se limita a q_adm.
+      { label: 'CM+CV', R1, R2, Mx1: Mx1, Mx2: Mx2, limit: q_adm },
       { label: 'CM+CV+SXD', R1: sxdPlus.R1, R2: sxdPlus.R2, Mx1: Mx1 + Mx1_sx, Mx2: Mx2 + Mx2_sx, limit: q_adm_seismic },
       { label: 'CM+CV−SXD', R1: sxdMinus.R1, R2: sxdMinus.R2, Mx1: Mx1 - Mx1_sx, Mx2: Mx2 - Mx2_sx, limit: q_adm_seismic },
       { label: 'CM+CV+SYD', R1: R1 + Psy1, R2: R2 + Psy2, Mx1: Mx1 + Mx1_sy, Mx2: Mx2 + Mx2_sy, limit: q_adm_seismic },
